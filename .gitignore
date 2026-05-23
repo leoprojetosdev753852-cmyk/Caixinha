@@ -1,44 +1,15 @@
-# Dependencies
 node_modules/
-.pnp
-.pnp.js
-
-# Build outputs
-dist/
-build/
 .next/
 .turbo/
+dist/
 *.tsbuildinfo
 
-# Env files
 .env
 .env.local
 .env.*.local
 !.env.example
 
-# Logs
-logs/
 *.log
-npm-debug.log*
-pnpm-debug.log*
-
-# IDEs
+.DS_Store
 .vscode/
 .idea/
-*.swp
-*.swo
-.DS_Store
-
-# Coverage
-coverage/
-.nyc_output/
-
-# Prisma
-*.db
-*.db-journal
-
-# OS
-Thumbs.db
-
-# Railway
-.railway/

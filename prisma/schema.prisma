@@ -1,0 +1,212 @@
+// Schema do banco — Caixinha
+// Otimizado para Supabase (com connection pooling)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ============================================
+// ENUMS
+// ============================================
+
+enum Role {
+  ADMIN
+  USER
+}
+
+enum TipoChavePix {
+  CPF
+  EMAIL
+  TELEFONE
+  ALEATORIA
+}
+
+enum StatusCaixinha {
+  ATIVA
+  CONCLUIDA
+  CANCELADA
+}
+
+enum StatusPagamentoPonto {
+  PENDENTE
+  PAGO
+  ATRASADO
+}
+
+enum StatusEmprestimo {
+  ATIVO
+  QUITADO
+  ATRASADO
+}
+
+// ============================================
+// USUÁRIOS & AUTH
+// ============================================
+
+model Usuario {
+  id             String  @id @default(cuid())
+  nomeCompleto   String
+  cpf            String  @unique
+  senhaHash      String?
+  role           Role    @default(USER)
+  perfilCompleto Boolean @default(false)
+  ativo          Boolean @default(true)
+
+  tipoChavePix TipoChavePix?
+  chavePix     String?
+
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  criadoPorId     String?
+  criadoPor       Usuario?  @relation("UsuariosCriados", fields: [criadoPorId], references: [id])
+  usuariosCriados Usuario[] @relation("UsuariosCriados")
+
+  pontosCaixinha PontoCaixinha[]
+  emprestimos    Emprestimo[]
+  refreshTokens  RefreshToken[]
+  auditorias     Auditoria[]
+
+  @@index([cpf])
+  @@map("usuarios")
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  usuarioId String
+  usuario   Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  expiraEm  DateTime
+  revogado  Boolean  @default(false)
+  criadoEm  DateTime @default(now())
+
+  @@index([token])
+  @@index([usuarioId])
+  @@map("refresh_tokens")
+}
+
+// ============================================
+// CAIXINHAS
+// ============================================
+
+model Caixinha {
+  id               String         @id @default(cuid())
+  nome             String
+  valorTotal       Int
+  quantidadePontos Int
+  valorPorPonto    Int
+  diaPagamento     Int
+  duracaoMeses     Int
+  dataInicio       DateTime
+  status           StatusCaixinha @default(ATIVA)
+
+  observacao String?
+
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  pontos PontoCaixinha[]
+
+  @@map("caixinhas")
+}
+
+model PontoCaixinha {
+  id         String   @id @default(cuid())
+  caixinhaId String
+  caixinha   Caixinha @relation(fields: [caixinhaId], references: [id], onDelete: Cascade)
+  numero     Int
+
+  usuarioId String?
+  usuario   Usuario? @relation(fields: [usuarioId], references: [id])
+
+  mesContemplacao Int
+
+  alocadoEm DateTime?
+
+  pagamentos PagamentoPonto[]
+
+  @@unique([caixinhaId, numero])
+  @@index([usuarioId])
+  @@map("pontos_caixinha")
+}
+
+model PagamentoPonto {
+  id      String        @id @default(cuid())
+  pontoId String
+  ponto   PontoCaixinha @relation(fields: [pontoId], references: [id], onDelete: Cascade)
+
+  mesReferencia  Int
+  valorDevido    Int
+  status         StatusPagamentoPonto @default(PENDENTE)
+  dataVencimento DateTime
+  dataPagamento  DateTime?
+  observacao     String?
+
+  baixadoPorId String?
+  criadoEm     DateTime @default(now())
+
+  @@unique([pontoId, mesReferencia])
+  @@index([status])
+  @@index([dataVencimento])
+  @@map("pagamentos_ponto")
+}
+
+// ============================================
+// EMPRÉSTIMOS
+// ============================================
+
+model Emprestimo {
+  id                    String           @id @default(cuid())
+  usuarioId             String
+  usuario               Usuario          @relation(fields: [usuarioId], references: [id])
+  valorOriginal         Int
+  percentualJuros       Decimal          @db.Decimal(5, 2)
+  percentualJurosAtraso Decimal          @db.Decimal(5, 2)
+  dataVencimento        DateTime
+  observacao            String?
+
+  valorPago     Int       @default(0)
+  dataPagamento DateTime?
+  diasAtraso    Int       @default(0)
+
+  status StatusEmprestimo @default(ATIVO)
+
+  baixadoPorId String?
+
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  @@index([usuarioId])
+  @@index([status])
+  @@index([dataVencimento])
+  @@map("emprestimos")
+}
+
+// ============================================
+// AUDITORIA
+// ============================================
+
+model Auditoria {
+  id        String   @id @default(cuid())
+  usuarioId String?
+  usuario   Usuario? @relation(fields: [usuarioId], references: [id])
+
+  categoria String
+  acao      String
+  metadata  Json?
+  ip        String?
+  userAgent String?
+
+  criadoEm DateTime @default(now())
+
+  @@index([categoria])
+  @@index([usuarioId])
+  @@index([criadoEm])
+  @@map("auditorias")
+}

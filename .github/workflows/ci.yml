@@ -11,21 +11,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - uses: pnpm/action-setup@v3
-        with:
-          version: 8.15.0
-
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: 'pnpm'
+          cache: 'npm'
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+      - name: Install
+        run: npm install
 
       - name: Generate Prisma Client
-        run: pnpm --filter @caixinhas/database generate
+        run: npx prisma generate
 
       - name: Type check
-        run: pnpm type-check
+        run: npm run type-check

@@ -1,0 +1,10 @@
+{
+  "name": "Caixinha",
+  "short_name": "Caixinha",
+  "description": "Gestão de caixinhas e empréstimos",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#ffffff",
+  "theme_color": "#7c3aed"
+}

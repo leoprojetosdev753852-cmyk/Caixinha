@@ -1,59 +1,68 @@
-# 💰 Caixinhas
+# 💰 Caixinha
 
 Sistema mobile-first para gestão de caixinhas (consórcio rotativo) e empréstimos pessoais.
 
 ## Stack
 
-- **Backend:** Node.js 20 + Fastify + TypeScript + Prisma
-- **Frontend:** Next.js 14 + Tailwind + shadcn/ui (PWA)
-- **Banco:** PostgreSQL
-- **Deploy:** Railway (full stack)
+- **Framework:** Next.js 14 (App Router) + TypeScript
+- **Estilo:** Tailwind + shadcn/ui
+- **Banco:** PostgreSQL (Supabase)
+- **ORM:** Prisma 5
+- **Auth:** JWT (jose) + httpOnly cookies + bcrypt
+- **Deploy:** Vercel
+- **Cron:** GitHub Actions
 
 ## Estrutura
 
 ```
-caixinhas/
-├── apps/
-│   ├── api/        # Backend Fastify
-│   └── web/        # Frontend Next.js
-└── packages/
-    ├── database/   # Prisma schema + client
-    └── shared/     # Tipos e schemas Zod compartilhados
+src/
+├── app/
+│   ├── api/          # Backend (Next.js Route Handlers)
+│   │   ├── auth/     # login, check-cpf, first-access, refresh, logout
+│   │   ├── users/    # /me
+│   │   ├── cron/     # endpoints chamados pelo GitHub Actions
+│   │   └── health/   # health check
+│   ├── (auth)/       # login, primeiro-acesso
+│   ├── (admin)/      # dashboard, caixinhas, emprestimos, usuarios
+│   └── (user)/       # home, caixinhas, emprestimos, perfil
+├── components/
+├── lib/              # prisma, auth, api-client, utils
+├── shared/           # validações compartilhadas (CPF, money, schemas Zod)
+└── stores/           # Zustand stores
+
+prisma/
+├── schema.prisma
+└── seed.ts
 ```
 
 ## Setup local
 
-### Pré-requisitos
-- Node.js 20+
-- pnpm 8+
-- PostgreSQL local OU acesso a um banco remoto (Railway)
-
-### Passos
-
 ```bash
-# 1. Instalar dependências
-pnpm install
+# 1. Instalar
+npm install
 
-# 2. Configurar env
+# 2. Configurar .env (copia .env.example)
 cp .env.example .env
-# Editar .env com DATABASE_URL e gerar JWT secrets:
-#   openssl rand -hex 32
 
-# 3. Rodar migrations
-pnpm db:migrate
+# 3. Gerar Prisma Client
+npx prisma generate
 
-# 4. Criar admin inicial
-pnpm db:seed
+# 4. Rodar migrations
+npx prisma migrate dev --name init
 
-# 5. Iniciar dev
-pnpm dev
+# 5. Criar admin inicial
+npm run db:seed
+
+# 6. Subir dev
+npm run dev
 ```
 
-Backend: http://localhost:3333
-Frontend: http://localhost:3000
+Abre http://localhost:3000
 
-## Documentação
+## Deploy
 
-- [`PASSO-A-PASSO.md`](./PASSO-A-PASSO.md) — Setup completo passo a passo
-- [`DEPLOY.md`](./DEPLOY.md) — Deploy no Railway
-- [`ARQUITETURA.md`](./ARQUITETURA.md) — Visão geral da arquitetura
+Veja [`PASSO-A-PASSO.md`](./PASSO-A-PASSO.md) — passo a passo completo do GitHub → Supabase → Vercel.
+
+## Custo
+
+**$0/mês.** Vercel free + Supabase free + GitHub Actions free.

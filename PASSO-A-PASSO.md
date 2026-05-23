@@ -1,380 +1,298 @@
-# 📋 Passo a Passo — Do zero ao deploy
+# 📋 Passo a Passo — Vercel + Supabase (100% grátis)
 
-Siga **na ordem**. Cada passo tem comando exato + o que esperar de resposta.
-
----
-
-## ✅ PASSO 1 — Verificar ferramentas (5 min)
-
-Abre o PowerShell e roda:
-
-```powershell
-node --version
-```
-
-**Esperado:** `v20.x.x` ou maior. Se não, baixa em https://nodejs.org/ (LTS).
-
-```powershell
-git --version
-```
-
-**Esperado:** algo tipo `git version 2.x`. Já deve ter, mas se faltar: https://git-scm.com/
-
-```powershell
-npm install -g pnpm@8.15.0
-pnpm --version
-```
-
-**Esperado:** `8.15.0`
+Siga **na ordem**.
 
 ---
 
-## ✅ PASSO 2 — Descompactar o projeto (2 min)
+## ✅ PASSO 1 — Substituir o projeto atual
 
-1. Baixa o `caixinhas-fase0-final.zip` (que vou entregar no final desta mensagem)
-2. Descompacta em `C:\Users\Tutts\`
-3. A pasta resultante deve ser `C:\Users\Tutts\caixinhas-final\`
-4. Renomeia pra ficar limpo:
+Você já tem `C:\Users\Tutts\caixinhas\` com o projeto antigo (Railway/Fastify). Vamos substituir tudo pela nova versão.
+
+### 1.1. Backup (opcional, mas recomendado)
 
 ```powershell
 cd C:\Users\Tutts
-Rename-Item -Path "caixinhas-final" -NewName "caixinhas"
-cd caixinhas
+Rename-Item -Path "caixinhas" -NewName "caixinhas-OLD"
+```
+
+### 1.2. Extrair o novo ZIP
+
+Baixa o `caixinha-vercel.zip` que vou entregar e:
+
+```powershell
+cd C:\Users\Tutts
+Expand-Archive -Path "C:\Users\Tutts\Downloads\caixinha-vercel.zip" -DestinationPath "C:\Users\Tutts" -Force
+cd C:\Users\Tutts\caixinha
 dir
 ```
 
-**Esperado:** lista com `apps`, `packages`, `.github`, `package.json`, `README.md`, etc.
+**Esperado:** lista com `src`, `prisma`, `public`, `.github`, `package.json`, etc.
 
 ---
 
-## ✅ PASSO 3 — Criar repositório no GitHub (5 min)
+## ✅ PASSO 2 — Criar conta + projeto Supabase
 
-### 3.1. Iniciar git local
+### 2.1. Criar conta
 
-```powershell
-cd C:\Users\Tutts\caixinhas
+1. Vai em https://supabase.com
+2. **Start your project** → **Sign in with GitHub**
+3. ⚠️ **Usa a conta nova** `leoprojetosdev753852-cmyk` (mesma do GitHub)
 
-git init
-git add .
-git commit -m "feat: setup inicial Fase 0 (auth + estrutura monorepo)"
-git branch -M main
+### 2.2. Criar projeto
+
+1. Click **New project**
+2. **Organization:** deixa a default
+3. **Name:** `caixinha`
+4. **Database Password:** **gera uma forte e SALVA num lugar seguro** (Supabase NÃO mostra de novo)
+   - Sugestão: usa um gerador, tipo 20 caracteres aleatórios
+5. **Region:** **South America (São Paulo)** — menor latência
+6. **Pricing Plan:** Free
+7. Click **Create new project**
+8. Aguarda ~2 minutos enquanto provisiona
+
+### 2.3. Pegar as Connection Strings
+
+Quando o projeto subir:
+
+1. **Settings** (engrenagem no menu lateral) → **Database**
+2. Role até **Connection string**
+3. Tem 2 abas: **URI** (para libs comuns) e **Connection pooling** (Recomendada pra Vercel)
+
+Você vai precisar de **DUAS** strings:
+
+**A) DATABASE_URL** (Connection pooling, **Transaction mode**, porta 6543):
+
+Marca a aba **Transaction**. Copia algo tipo:
+```
+postgresql://postgres.xxxxx:[YOUR-PASSWORD]@aws-0-sa-east-1.pooler.supabase.com:6543/postgres
 ```
 
-**Esperado:** "X files changed" no commit.
+Substitui `[YOUR-PASSWORD]` pela senha que você gerou no 2.2 step 4.
 
-### 3.2. Criar o repo no GitHub
+**Adiciona no final:** `?pgbouncer=true&connection_limit=1`
 
-1. Vai em https://github.com/new
-2. **Repository name:** `caixinhas`
-3. **Private**
-4. **NÃO** marca "Initialize with README"
-5. Click **Create repository**
-
-### 3.3. Conectar e enviar
-
-Na tela seguinte do GitHub, copia o bloco "**push an existing repository**" e cola no PowerShell. Vai ser algo assim:
-
-```powershell
-git remote add origin https://github.com/Leonardodevcloud/caixinhas.git
-git push -u origin main
+Resultado final fica:
+```
+postgresql://postgres.xxxxx:SENHA@aws-0-sa-east-1.pooler.supabase.com:6543/postgres?pgbouncer=true&connection_limit=1
 ```
 
-**Esperado:** "Branch 'main' set up to track remote..."
+**B) DIRECT_URL** (Direct connection, porta 5432):
 
-Confere que apareceu: https://github.com/Leonardodevcloud/caixinhas
+Aba **Session** ou **Direct connection**. Copia algo tipo:
+```
+postgresql://postgres.xxxxx:[YOUR-PASSWORD]@aws-0-sa-east-1.pooler.supabase.com:5432/postgres
+```
 
----
+Substitui `[YOUR-PASSWORD]` pela mesma senha.
 
-## ✅ PASSO 4 — Criar projeto no Railway (5 min)
-
-1. Acessa https://railway.app
-2. **Login with GitHub** → autoriza acesso
-3. Na home: **New Project** → **Deploy from GitHub repo**
-4. Autoriza o Railway a ver `caixinhas`
-5. Seleciona o repo `caixinhas`
-
-⚠️ Railway vai tentar buildar e **vai falhar** (não tem env vars ainda). Tudo bem, vamos configurar.
+**Salva as duas strings num bloco de notas** — vamos usar várias vezes.
 
 ---
 
-## ✅ PASSO 5 — Adicionar PostgreSQL (3 min)
+## ✅ PASSO 3 — Configurar .env local
 
-Dentro do projeto que acabou de criar:
+Na pasta do projeto:
 
-1. Click **+ New** (canto superior direito) → **Database** → **Add PostgreSQL**
-2. Aguarda 30s o Postgres subir
-3. Click no card do **Postgres** → aba **Variables**
-4. Confere que tem `DATABASE_URL` (vamos referenciar mais tarde)
+```powershell
+cd C:\Users\Tutts\caixinha
+Copy-Item .env.example .env
+notepad .env
+```
 
-✅ Banco pronto.
-
----
-
-## ✅ PASSO 6 — Configurar serviço API (10 min)
-
-Click no card do serviço que veio do GitHub (deve estar com nome do repo).
-
-### 6.1. Renomear pra "api"
-
-**Settings** → role até **Service** → **Service Name** → muda pra `api` → **Update**
-
-### 6.2. Build Command e Start Command
-
-Ainda em **Settings**:
-
-| Campo | Valor |
-|---|---|
-| **Root Directory** | (deixa vazio) |
-| **Build Command** | `pnpm install --frozen-lockfile && pnpm --filter @caixinhas/database generate && pnpm --filter @caixinhas/api build` |
-| **Start Command** | `node apps/api/dist/server.js` |
-| **Watch Paths** | `apps/api/**` `packages/**` |
-
-### 6.3. Variáveis de ambiente
-
-**Aba Variables** → click em **Raw Editor** → cola **tudo** isso de uma vez:
+No Notepad, preenche:
 
 ```env
-NODE_ENV=production
-PORT=3333
-DATABASE_URL=${{Postgres.DATABASE_URL}}
-JWT_ACCESS_SECRET=COLE_AQUI_HEX_1
-JWT_REFRESH_SECRET=COLE_AQUI_HEX_2
-JWT_ACCESS_EXPIRES=15m
-JWT_REFRESH_EXPIRES=7d
-COOKIE_DOMAIN=
-COOKIE_SECURE=true
-CORS_ORIGIN=http://localhost:3000
-ADMIN_INITIAL_NAME=Tutts
-ADMIN_INITIAL_CPF=SEU_CPF_SO_NUMEROS_11_DIGITOS
-ADMIN_INITIAL_PASSWORD=SuaSenhaForte123
+DATABASE_URL="postgresql://postgres.xxxxx:SENHA@aws-0-sa-east-1.pooler.supabase.com:6543/postgres?pgbouncer=true&connection_limit=1"
+DIRECT_URL="postgresql://postgres.xxxxx:SENHA@aws-0-sa-east-1.pooler.supabase.com:5432/postgres"
+
+JWT_ACCESS_SECRET="GERA_AGORA_COM_POWERSHELL"
+JWT_REFRESH_SECRET="GERA_OUTRO_DIFERENTE"
+CRON_SECRET="GERA_OUTRO_TAMBEM"
+
+ADMIN_INITIAL_NAME="Seu Nome"
+ADMIN_INITIAL_CPF="SEU_CPF_SO_NUMEROS"
+ADMIN_INITIAL_PASSWORD="UmaSenhaForte123"
 ```
 
-### 6.4. Gerar os JWT secrets
+### 3.1. Gerar os 3 secrets
 
-No PowerShell:
+Roda 3 vezes no PowerShell:
 
 ```powershell
-# Roda 2 vezes — copia cada saída
 -join ((1..32) | ForEach-Object { '{0:x2}' -f (Get-Random -Maximum 256) })
 ```
 
-Cada execução gera 64 caracteres hex. Cola:
-- 1ª saída → substitui `COLE_AQUI_HEX_1`
-- 2ª saída → substitui `COLE_AQUI_HEX_2`
+Cada execução gera 64 chars. Cola em:
+- JWT_ACCESS_SECRET
+- JWT_REFRESH_SECRET
+- CRON_SECRET
 
-⚠️ Sobre `COOKIE_DOMAIN`: **deixa vazio mesmo**. No Railway, com domínios `.up.railway.app`, deixar vazio funciona melhor que tentar setar o domínio.
-
-Click **Update Variables**. Railway redeploya automaticamente.
-
-### 6.5. Gerar domínio público
-
-**Settings** → role até **Networking** → **Public Networking** → **Generate Domain**
-
-Vai aparecer algo tipo:
-```
-api-production-abc123.up.railway.app
-```
-
-**Anota essa URL** — precisa dela no próximo passo.
-
-### 6.6. Aguardar build
-
-**Aba Deployments** → acompanha o log.
-
-**Esperado:**
-```
-Installing pnpm...
-Installing dependencies...
-Generating Prisma Client...
-Building @caixinhas/api...
-✓ Build succeeded
-Starting: node apps/api/dist/server.js
-🚀 API rodando em http://localhost:3333
-```
-
-Se aparecer ✅ deploy successful, está OK.
-
-### 6.7. Testar
-
-Abre no navegador:
-```
-https://api-production-abc123.up.railway.app/api/health
-```
-
-**Esperado:**
-```json
-{"status":"ok","timestamp":"...","uptime":42.5}
-```
-
-Testa também:
-```
-https://api-production-abc123.up.railway.app/api/health/db
-```
-
-**Esperado:**
-```json
-{"status":"ok","database":"connected"}
-```
+Salva o .env.
 
 ---
 
-## ✅ PASSO 7 — Rodar migrations + criar admin (5 min)
-
-A API está rodando, mas o banco está vazio. Precisa criar as tabelas.
-
-### 7.1. Instalar Railway CLI
+## ✅ PASSO 4 — Instalar dependências e migrar banco
 
 ```powershell
-npm install -g @railway/cli
-railway login
-```
+cd C:\Users\Tutts\caixinha
 
-Abre o navegador → autoriza → volta no PowerShell.
+# Instala tudo (vai demorar uns 2 min)
+npm install
 
-### 7.2. Linkar projeto local
+# Gera Prisma Client
+npx prisma generate
 
-```powershell
-cd C:\Users\Tutts\caixinhas
-railway link
-```
-
-Setas pra selecionar:
-- Projeto: `caixinhas`
-- Service: `api`
-
-### 7.3. Rodar migrations
-
-```powershell
-railway run pnpm --filter @caixinhas/database migrate:deploy
+# Cria as tabelas no Supabase
+npx prisma migrate dev --name init
 ```
 
 **Esperado:**
 ```
-Applying migration `20260523_init`
 ✔ Generated Prisma Client
-The following migration(s) have been applied: 20260523_init
+The following migration(s) have been created and applied:
+20260523_init/
+  └─ migration.sql
 ```
 
-### 7.4. Criar admin
+### 4.1. Criar o admin
 
 ```powershell
-railway run pnpm --filter @caixinhas/database seed
+npm run db:seed
 ```
 
 **Esperado:**
 ```
 ✅ Admin criado com sucesso:
    ID: clxxxxxxx
-   Nome: Tutts
+   Nome: Seu Nome
    CPF: 12345678900
 ```
 
+### 4.2. Testar local
+
+```powershell
+npm run dev
+```
+
+Abre http://localhost:3000
+
+- Deve redirecionar pro `/login`
+- Entra com CPF + senha do admin que cadastrou
+- Deve cair no `/dashboard`
+
+Se chegou aqui, **localmente está 100%**. Mata o servidor (Ctrl+C) e vamos pro deploy.
+
 ---
 
-## ✅ PASSO 8 — Configurar serviço Web (10 min)
+## ✅ PASSO 5 — Subir código pro GitHub
 
-Volta na tela do projeto Railway → **+ New** → **GitHub Repo** → seleciona `caixinhas` (sim, o mesmo repo).
+```powershell
+cd C:\Users\Tutts\caixinha
 
-### 8.1. Renomear pra "web"
+git init
+git add .
+git commit -m "feat: setup completo Vercel + Supabase"
+git branch -M main
 
-**Settings** → **Service Name** → `web` → **Update**
+# ⚠️ Como você está numa conta nova do GitHub, vai criar repo NOVO
+# Antes, vai em https://github.com/new e cria repo "caixinha" (singular, sem 's')
+# Depois:
 
-### 8.2. Build Command e Start Command
+git remote add origin https://github.com/leoprojetosdev753852-cmyk/caixinha.git
+git push -u origin main
+```
 
-| Campo | Valor |
+⚠️ Se você ainda tem o repo `Caixinha` (com `C` maiúsculo) e quer reusar, **substitui o nome** no comando acima.
+
+---
+
+## ✅ PASSO 6 — Deploy Vercel
+
+### 6.1. Criar conta Vercel
+
+1. Vai em https://vercel.com
+2. **Sign Up** → **Continue with GitHub**
+3. ⚠️ Logando com a conta nova GitHub (`leoprojetosdev753852-cmyk`)
+
+### 6.2. Importar projeto
+
+1. Na home da Vercel, click **Add New...** → **Project**
+2. **Import Git Repository** → procura `caixinha` → click **Import**
+3. Vercel detecta Next.js automaticamente
+
+### 6.3. Configurar variáveis de ambiente
+
+Antes do **Deploy**, expande **Environment Variables** e cola:
+
+```env
+DATABASE_URL=postgresql://postgres.xxxxx:SENHA@...6543/postgres?pgbouncer=true&connection_limit=1
+DIRECT_URL=postgresql://postgres.xxxxx:SENHA@...5432/postgres
+JWT_ACCESS_SECRET=mesmo_que_local
+JWT_REFRESH_SECRET=mesmo_que_local
+CRON_SECRET=mesmo_que_local
+```
+
+⚠️ **NÃO** precisa colocar `ADMIN_INITIAL_*` na Vercel (só é usado no seed, que já rodou local).
+
+### 6.4. Click Deploy
+
+Aguarda 2-3 min. Quando terminar, Vercel mostra:
+
+```
+🎉 Your project is live at https://caixinha-xxxx.vercel.app
+```
+
+### 6.5. Testar produção
+
+Abre a URL. Login com mesmo CPF/senha do admin → cai no dashboard.
+
+---
+
+## ✅ PASSO 7 — Configurar cron no GitHub Actions
+
+O worker (que calcula atrasos diariamente) agora roda como GitHub Actions.
+
+### 7.1. Adicionar secrets no GitHub
+
+1. Vai em `https://github.com/leoprojetosdev753852-cmyk/caixinha/settings/secrets/actions`
+2. Click **New repository secret** → cria 2:
+
+| Nome | Valor |
 |---|---|
-| **Root Directory** | (deixa vazio) |
-| **Build Command** | `pnpm install --frozen-lockfile && pnpm --filter @caixinhas/web build` |
-| **Start Command** | `pnpm --filter @caixinhas/web start` |
-| **Watch Paths** | `apps/web/**` `packages/shared/**` |
+| `APP_URL` | `https://caixinha-xxxx.vercel.app` (URL da Vercel sem barra no final) |
+| `CRON_SECRET` | Mesmo valor que está no .env e na Vercel |
 
-### 8.3. Variáveis
+### 7.2. Testar manualmente
 
-**Variables → Raw Editor:**
+1. Vai em `https://github.com/leoprojetosdev753852-cmyk/caixinha/actions`
+2. Click no workflow **Cron - Calcular Atrasos**
+3. Click **Run workflow** → **Run workflow** (verde)
+4. Aguarda 30s, recarrega a página
+5. Deve aparecer ✅ com status verde
 
-```env
-NEXT_PUBLIC_API_URL=https://api-production-abc123.up.railway.app
-PORT=3000
-```
-
-⚠️ Substitui pelo **URL real** do seu serviço API (do passo 6.5).
-
-### 8.4. Gerar domínio do web
-
-**Settings → Networking → Generate Domain**
-
-Vai gerar tipo:
-```
-web-production-xyz789.up.railway.app
-```
-
-**Anota essa URL.**
-
-### 8.5. Atualizar CORS no serviço API
-
-Volta no serviço **api** → **Variables** → edita `CORS_ORIGIN`:
-
-```env
-CORS_ORIGIN=https://web-production-xyz789.up.railway.app
-```
-
-Railway redeploya automaticamente.
-
-### 8.6. Forçar redeploy do web
-
-No serviço **web** → **Deployments** → click 3 pontinhos do último → **Redeploy**
-
-**Esperado nos logs:**
-```
-Installing dependencies...
-Building Next.js...
-✓ Compiled successfully
-Starting Next.js on port 3000
-```
+A partir daqui, ele roda automaticamente todo dia às 00h Brasília.
 
 ---
 
-## ✅ PASSO 9 — Habilitar Serverless (economizar créditos) (2 min)
+## 🎉 Pronto! Tudo em produção, $0/mês
 
-Em **cada serviço** (`api` e `web`):
+### URLs do seu sistema
 
-1. **Settings** → role até **Serverless**
-2. Toggle **ON**
-
-⚠️ **NÃO ativa** no Postgres — banco precisa estar sempre disponível.
-
-Com isso, serviços param quando não tem tráfego. Religa em ~5s na primeira request depois de inatividade.
-
----
-
-## ✅ PASSO 10 — Primeiro login (3 min)
-
-1. Abre `https://web-production-xyz789.up.railway.app`
-2. Deve redirecionar pro `/login`
-3. **CPF:** o que você colocou em `ADMIN_INITIAL_CPF`
-4. **Senha:** o que você colocou em `ADMIN_INITIAL_PASSWORD`
-5. Click **Entrar**
-
-**Esperado:** redireciona pra `/dashboard` mostrando "Olá, administrador".
-
----
-
-## 🎉 Pronto!
-
-A Fase 0 está em produção. A partir daqui:
+- **App em produção:** `https://caixinha-xxxx.vercel.app`
+- **Banco (UI visual):** Supabase → Table Editor
+- **Logs:** Vercel → seu projeto → Deployments → click no deployment → Functions tab
+- **Cron history:** GitHub Actions
 
 ### Workflow de desenvolvimento
 
 ```powershell
-cd C:\Users\Tutts\caixinhas
+cd C:\Users\Tutts\caixinha
 git checkout -b feature/lista-usuarios
 
 # ... codar ...
 
 # Testar local
-pnpm dev
-# API: http://localhost:3333
-# Web: http://localhost:3000
+npm run dev
 
 # Subir
 git add .
@@ -382,43 +300,29 @@ git commit -m "feat: tela de listagem de usuários"
 git push origin feature/lista-usuarios
 
 # Abre PR no GitHub → CI roda
-# Merge na main → Railway redeploya automaticamente
+# Merge na main → Vercel deployа automaticamente
 ```
-
-### Próximos passos (Fase 1)
-
-Avisa que tudo está funcionando que eu parto pra **Fase 1**:
-- CRUD admin de usuários
-- Tela admin lista usuários + abre detalhe com PIX
-- Middleware Next.js redirecionando por role
-- Tela "Editar perfil" pro user atualizar PIX
 
 ---
 
 ## 🚨 Troubleshooting
 
-| Sintoma | O que checar |
+| Sintoma | Solução |
 |---|---|
-| Build falha em "pnpm install" | Versão Node em Settings → garantir 20+ |
-| Build falha em "prisma generate" | `DATABASE_URL` está como `${{Postgres.DATABASE_URL}}`? |
-| API sobe mas `/health/db` dá erro | Postgres ainda está provisionando, aguarda 1min |
-| CORS error no navegador | `CORS_ORIGIN` no API tem a URL **exata** do web? |
-| "Cookie not set" no login | `COOKIE_SECURE=true` e está usando HTTPS? |
-| Login funciona mas refresh falha | `COOKIE_DOMAIN` deve estar vazio nas vars |
-| 401 em todas as requests | JWT secrets têm 32+ chars? |
-| Página em branco no web | `NEXT_PUBLIC_API_URL` está com a URL completa (com https)? |
+| `npm install` falha | Apaga `node_modules` e `package-lock.json`, roda de novo |
+| `prisma migrate` dá erro de conexão | Confere DATABASE_URL e DIRECT_URL — senha correta? Região correta? |
+| Build na Vercel falha em "prisma generate" | A variável `DATABASE_URL` está definida na Vercel? |
+| Login retorna 500 | Vercel → Logs → ver erro real. Geralmente é env var faltando |
+| "JWT_ACCESS_SECRET deve ter pelo menos 32 caracteres" | Cada secret precisa ter 64 chars hex (32 bytes) |
+| Cookie não persiste no login | Em produção HTTPS é automático. Em local, OK não persistir entre abas |
 
 ---
 
-## 💰 Custo estimado
+## 📋 Próximos passos (Fase 1)
 
-Com serverless ON em api+web e baixo tráfego:
+Quando estiver tudo no ar e o login funcionar, me avisa. Aí partimos pra:
 
-| Serviço | Estimado |
-|---|---|
-| api | ~$0.50/mês |
-| web | ~$0.50/mês |
-| postgres | ~$1-2/mês |
-| **Total real** | **~$2-3/mês** |
-
-Mais a taxa fixa do plano Hobby ($5/mês), que o trial cobre nos primeiros ~15 dias.
+- CRUD admin de usuários (cadastro prévio)
+- Tela admin lista usuários + dados PIX
+- Middleware de proteção de rota por role
+- Tela "Editar perfil"
