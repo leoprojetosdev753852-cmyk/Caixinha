@@ -1,9 +1,9 @@
-'use client';
+﻿"use client";
 
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { type LucideIcon } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { type LucideIcon } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface NavItem {
   href: string;
@@ -24,15 +24,15 @@ export function BottomNav({ items }: BottomNavProps) {
         {items.map((item) => {
           const Icon = item.icon;
           const ativo =
-            pathname === item.href || pathname.startsWith(item.href + '/');
+            pathname === item.href || pathname.startsWith(item.href + "/");
 
           return (
             <Link
               key={item.href}
-              href={item.href}
+              href={item.href as any}
               className={cn(
-                'flex h-16 min-w-[64px] flex-1 flex-col items-center justify-center gap-1 transition',
-                ativo ? 'text-primary' : 'text-muted-foreground hover:text-foreground',
+                "flex h-16 min-w-[64px] flex-1 flex-col items-center justify-center gap-1 transition",
+                ativo ? "text-primary" : "text-muted-foreground hover:text-foreground"
               )}
             >
               <Icon className="h-5 w-5" />
