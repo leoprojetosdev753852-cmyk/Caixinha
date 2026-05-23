@@ -1,0 +1,29 @@
+{
+  "name": "caixinhas",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Sistema de gestão de caixinhas e empréstimos",
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "type-check": "turbo run type-check",
+    "test": "turbo run test",
+    "db:migrate": "pnpm --filter @caixinhas/database migrate",
+    "db:migrate:deploy": "pnpm --filter @caixinhas/database migrate:deploy",
+    "db:generate": "pnpm --filter @caixinhas/database generate",
+    "db:seed": "pnpm --filter @caixinhas/database seed",
+    "db:studio": "pnpm --filter @caixinhas/database studio"
+  },
+  "devDependencies": {
+    "turbo": "^2.0.0",
+    "typescript": "^5.4.0",
+    "@types/node": "^20.11.0",
+    "prettier": "^3.2.0"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=8.0.0"
+  },
+  "packageManager": "pnpm@8.15.9"
+}
