@@ -1,11 +1,10 @@
-import { LayoutDashboard, PiggyBank, HandCoins, Users } from 'lucide-react';
-import { BottomNav } from '@/components/layouts/bottom-nav';
+﻿import { BottomNav } from "@/components/layouts/bottom-nav";
 
 const navItems = [
-  { href: '/dashboard', label: 'Início', icon: LayoutDashboard },
-  { href: '/caixinhas', label: 'Caixinhas', icon: PiggyBank },
-  { href: '/emprestimos', label: 'Empréstimos', icon: HandCoins },
-  { href: '/usuarios', label: 'Usuários', icon: Users },
+  { href: "/dashboard", label: "Início", icon: "dashboard" as const },
+  { href: "/caixinhas", label: "Caixinhas", icon: "piggy" as const },
+  { href: "/emprestimos", label: "Empréstimos", icon: "hand" as const },
+  { href: "/usuarios", label: "Usuários", icon: "users" as const },
 ];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {

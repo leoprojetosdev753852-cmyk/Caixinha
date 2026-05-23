@@ -1,11 +1,10 @@
-import { Home, PiggyBank, HandCoins, User } from 'lucide-react';
-import { BottomNav } from '@/components/layouts/bottom-nav';
+﻿import { BottomNav } from "@/components/layouts/bottom-nav";
 
 const navItems = [
-  { href: '/home', label: 'Início', icon: Home },
-  { href: '/caixinhas', label: 'Caixinhas', icon: PiggyBank },
-  { href: '/emprestimos', label: 'Empréstimos', icon: HandCoins },
-  { href: '/perfil', label: 'Perfil', icon: User },
+  { href: "/home", label: "Início", icon: "home" as const },
+  { href: "/caixinhas", label: "Caixinhas", icon: "piggy" as const },
+  { href: "/emprestimos", label: "Empréstimos", icon: "hand" as const },
+  { href: "/perfil", label: "Perfil", icon: "user" as const },
 ];
 
 export default function UserLayout({ children }: { children: React.ReactNode }) {

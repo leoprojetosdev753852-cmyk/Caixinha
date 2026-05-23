@@ -2,13 +2,31 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { type LucideIcon } from "lucide-react";
+import {
+  Home,
+  LayoutDashboard,
+  PiggyBank,
+  HandCoins,
+  Users,
+  User,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
+
+const ICONS = {
+  home: Home,
+  dashboard: LayoutDashboard,
+  piggy: PiggyBank,
+  hand: HandCoins,
+  users: Users,
+  user: User,
+} as const;
+
+export type IconName = keyof typeof ICONS;
 
 interface NavItem {
   href: string;
   label: string;
-  icon: LucideIcon;
+  icon: IconName;
 }
 
 interface BottomNavProps {
@@ -22,7 +40,7 @@ export function BottomNav({ items }: BottomNavProps) {
     <nav className="fixed bottom-0 left-0 right-0 z-40 border-t border-border bg-background pb-[env(safe-area-inset-bottom)]">
       <div className="mx-auto flex max-w-md items-center justify-around">
         {items.map((item) => {
-          const Icon = item.icon;
+          const Icon = ICONS[item.icon];
           const ativo =
             pathname === item.href || pathname.startsWith(item.href + "/");
 
