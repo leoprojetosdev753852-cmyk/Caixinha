@@ -33,7 +33,7 @@ interface Pagamento {
 interface Cota {
   id: string;
   valor: number;
-  usuario: { id: string; nomeCompleto: string; cpf: string };
+  usuario: { id: string; nomeCompleto: string; cpf: string | null };
   pagamentos: Pagamento[];
 }
 
@@ -57,7 +57,7 @@ interface Caixinha {
 interface UsuarioOpcao {
   id: string;
   nomeCompleto: string;
-  cpf: string;
+  cpf: string | null;
 }
 
 interface PageProps {
@@ -87,8 +87,6 @@ export default function CaixinhaDetalhePage({ params }: PageProps) {
 
   const [modalPonto, setModalPonto] = useState<{
     pontoId: string;
-    valor: number;
-    data: string;
   } | null>(null);
   const [editValorStr, setEditValorStr] = useState('');
   const [editValor, setEditValor] = useState(0);
@@ -115,7 +113,6 @@ export default function CaixinhaDetalhePage({ params }: PageProps) {
   const carregarUsuarios = async () => {
     setLoadingUsuarios(true);
     try {
-      // Tira filtro 'apenas=ativos' pra mostrar tudo
       const r = await apiFetch<{ usuarios: UsuarioOpcao[] }>(
         '/api/admin/usuarios?apenas=todos',
       );
@@ -150,18 +147,15 @@ export default function CaixinhaDetalhePage({ params }: PageProps) {
 
   const valorTotalCaixinha = caixinha.pontos.reduce((acc, p) => acc + p.valor, 0);
   const isRascunho = caixinha.status === 'RASCUNHO';
-  const pontosCompletos = caixinha.pontos.filter((p) => {
-    const soma = p.cotas.reduce((acc, c) => acc + c.valor, 0);
-    return soma === p.valor && p.cotas.length > 0;
-  }).length;
-  const podeAtivar = isRascunho && pontosCompletos === caixinha.pontos.length;
+  const pontosComCotistas = caixinha.pontos.filter((p) => p.cotas.length > 0).length;
+  const pontosVazios = caixinha.pontos.length - pontosComCotistas;
+  const podeAtivar = isRascunho && pontosComCotistas > 0;
 
   const abrirModalCota = (ponto: Ponto) => {
     const soma = ponto.cotas.reduce((acc, c) => acc + c.valor, 0);
     const restante = ponto.valor - soma;
     setModalCota({ pontoId: ponto.id, valorRestante: restante });
     setUsuarioSelecionado('');
-    // Preenche valor padrão = restante
     setValorCotaStr((restante / 100).toFixed(2).replace('.', ','));
     setValorCotaRaw(restante);
   };
@@ -209,11 +203,7 @@ export default function CaixinhaDetalhePage({ params }: PageProps) {
   };
 
   const abrirModalPonto = (ponto: Ponto) => {
-    setModalPonto({
-      pontoId: ponto.id,
-      valor: ponto.valor,
-      data: ponto.dataContemplacao ? toInputDate(ponto.dataContemplacao) : '',
-    });
+    setModalPonto({ pontoId: ponto.id });
     setEditValorStr((ponto.valor / 100).toFixed(2).replace('.', ','));
     setEditValor(ponto.valor);
     setEditData(ponto.dataContemplacao ? toInputDate(ponto.dataContemplacao) : '');
@@ -243,11 +233,18 @@ export default function CaixinhaDetalhePage({ params }: PageProps) {
   const handleAtivar = async () => {
     setAtivando(true);
     try {
-      await apiFetch(`/api/admin/caixinhas/${id}/ativar`, {
+      const result = await apiFetch<{
+        pagamentosGerados: number;
+        pontosVazios: number;
+      }>(`/api/admin/caixinhas/${id}/ativar`, {
         method: 'POST',
         body: {},
       });
-      toast.success('Caixinha ativada!');
+      toast.success(
+        `Caixinha ativada! ${result.pagamentosGerados} pagamento(s) gerados.${
+          result.pontosVazios > 0 ? ` ${result.pontosVazios} ponto(s) vazio(s).` : ''
+        }`,
+      );
       setModalAtivar(false);
       carregar();
     } catch (err) {
@@ -311,9 +308,9 @@ export default function CaixinhaDetalhePage({ params }: PageProps) {
             className="flex h-12 w-full items-center justify-center gap-2 rounded-md bg-emerald-600 px-4 text-base font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
           >
             <Play className="h-4 w-4" />
-            {podeAtivar
-              ? 'Ativar caixinha'
-              : `Ativar (${pontosCompletos}/${caixinha.pontos.length} pontos prontos)`}
+            {pontosComCotistas === 0
+              ? 'Ativar (adicione pelo menos 1 cotista)'
+              : `Ativar caixinha (${pontosComCotistas}/${caixinha.pontos.length} pontos com cotistas)`}
           </button>
         )}
 
@@ -375,7 +372,8 @@ export default function CaixinhaDetalhePage({ params }: PageProps) {
                                 {cota.usuario.nomeCompleto}
                               </p>
                               <p className="text-xs text-muted-foreground">
-                                {formatarCPF(cota.usuario.cpf)} · {formatarBRL(cota.valor)}
+                                {cota.usuario.cpf ? formatarCPF(cota.usuario.cpf) : 'sem CPF'} ·{' '}
+                                {formatarBRL(cota.valor)}
                                 {p.cotas.length > 1 && (
                                   <>
                                     {' / '}
@@ -463,7 +461,7 @@ export default function CaixinhaDetalhePage({ params }: PageProps) {
             <div className="space-y-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm">
               <p className="font-medium text-amber-900">Nenhum usuário cadastrado</p>
               <p className="text-xs text-amber-800">
-                Você precisa cadastrar usuários primeiro pra poder alocá-los na caixinha.
+                Cadastre usuários primeiro pra poder alocá-los.
               </p>
               <Link
                 href="/usuarios/novo"
@@ -486,12 +484,13 @@ export default function CaixinhaDetalhePage({ params }: PageProps) {
                   <option value="">Selecione</option>
                   {usuarios.map((u) => (
                     <option key={u.id} value={u.id}>
-                      {u.nomeCompleto} · {formatarCPF(u.cpf)}
+                      {u.nomeCompleto}
+                      {u.cpf ? ` · ${formatarCPF(u.cpf)}` : ' · sem CPF'}
                     </option>
                   ))}
                 </select>
                 <p className="text-xs text-muted-foreground">
-                  {usuarios.length} usuário{usuarios.length > 1 ? 's' : ''} cadastrado{usuarios.length > 1 ? 's' : ''}
+                  {usuarios.length} usuário{usuarios.length > 1 ? 's' : ''} disponíveis
                 </p>
               </div>
               <div className="space-y-2">
@@ -505,7 +504,7 @@ export default function CaixinhaDetalhePage({ params }: PageProps) {
                 />
                 {modalCota && (
                   <p className="text-xs text-muted-foreground">
-                    Valor restante do ponto: {formatarBRL(modalCota.valorRestante)}
+                    Valor restante: {formatarBRL(modalCota.valorRestante)}
                   </p>
                 )}
               </div>
@@ -541,7 +540,6 @@ export default function CaixinhaDetalhePage({ params }: PageProps) {
               value={editData}
               onChange={(e) => setEditData(e.target.value)}
             />
-            <p className="text-xs text-muted-foreground">Quando este ponto recebe o bolão.</p>
           </div>
           <button
             onClick={handleSalvarPonto}
@@ -556,19 +554,21 @@ export default function CaixinhaDetalhePage({ params }: PageProps) {
       {/* Modal ativar */}
       <Modal open={modalAtivar} onClose={() => setModalAtivar(false)} title="Ativar caixinha">
         <div className="space-y-4">
-          <div className="flex gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
-            <AlertCircle className="h-4 w-4 shrink-0" />
-            <p>
-              Ao ativar, sistema gera automaticamente {caixinha.pontos.length} pagamentos para cada
-              cotista. Você não pode editar pontos ou cotas depois.
-            </p>
-          </div>
+          {pontosVazios > 0 && (
+            <div className="flex gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+              <AlertCircle className="h-4 w-4 shrink-0" />
+              <p>
+                Você tem {pontosVazios} ponto(s) vazio(s). Eles não vão gerar pagamentos.
+                Você pode adicionar cotistas neles depois, mas precisará atualizar manualmente.
+              </p>
+            </div>
+          )}
 
           <div className="rounded-md bg-background p-3 text-sm space-y-1">
             <div className="flex justify-between">
-              <span className="text-muted-foreground">Pontos completos</span>
+              <span className="text-muted-foreground">Pontos com cotistas</span>
               <span className="font-semibold">
-                {pontosCompletos}/{caixinha.pontos.length}
+                {pontosComCotistas}/{caixinha.pontos.length}
               </span>
             </div>
             <div className="flex justify-between">

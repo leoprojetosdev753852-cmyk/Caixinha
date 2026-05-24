@@ -9,24 +9,33 @@ export const criarUsuarioSchema = z.object({
     .regex(/^[\p{L}\s'.-]+$/u, 'Nome só pode conter letras e espaços'),
   cpf: z
     .string()
-    .transform(limparCPF)
-    .refine((cpf) => cpf.length === 11, { message: 'CPF deve ter 11 dígitos' })
-    .refine(validarCPF, { message: 'CPF inválido' }),
+    .transform((v) => (v ? limparCPF(v) : ''))
+    .refine((cpf) => cpf === '' || cpf.length === 11, { message: 'CPF deve ter 11 dígitos' })
+    .refine((cpf) => cpf === '' || validarCPF(cpf), { message: 'CPF inválido' })
+    .optional()
+    .or(z.literal('')),
 });
 
 export const atualizarUsuarioAdminSchema = z.object({
   nomeCompleto: z
     .string()
-    .min(3, 'Nome muito curto')
-    .max(120, 'Nome muito longo')
+    .min(3)
+    .max(120)
     .regex(/^[\p{L}\s'.-]+$/u, 'Nome inválido')
     .optional(),
   ativo: z.boolean().optional(),
+  cpf: z
+    .string()
+    .transform((v) => (v ? limparCPF(v) : ''))
+    .refine((cpf) => cpf === '' || cpf.length === 11)
+    .refine((cpf) => cpf === '' || validarCPF(cpf))
+    .optional()
+    .or(z.literal('')),
 });
 
 export const atualizarPerfilFinanceiroSchema = z.object({
   tipoChavePix: z.enum(['CPF', 'EMAIL', 'TELEFONE', 'ALEATORIA']),
-  chavePix: z.string().min(1, 'Chave PIX obrigatória').max(200),
+  chavePix: z.string().min(1).max(200),
 });
 
 export const listarUsuariosQuerySchema = z.object({

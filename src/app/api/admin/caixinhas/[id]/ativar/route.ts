@@ -9,9 +9,11 @@ interface Ctx {
 }
 
 /**
- * Ativa caixinha. Cada cotista paga em todas as datas de contemplação dos pontos da caixinha.
- * Ex: Caixinha de 10 pontos com datas jan/2025, fev/2025, ..., out/2025.
- * Cada cotista gera 10 pagamentos, um para cada dessas datas.
+ * Ativa caixinha mesmo com pontos incompletos.
+ * Pontos vazios ou parciais NAO geram pagamentos (ficam zerados ate admin adicionar cotistas).
+ * Pontos completos geram pagamentos para cada data de contemplacao dos OUTROS pontos completos.
+ *
+ * Ajuste de regra: cada cotista paga em TODAS as datas de contemplacao definidas (de TODOS os pontos da caixinha).
  */
 export const POST = withErrorHandling(async (req: NextRequest, { params }: Ctx) => {
   const admin = await requireAdmin(req.headers.get('authorization'));
@@ -31,21 +33,18 @@ export const POST = withErrorHandling(async (req: NextRequest, { params }: Ctx) 
     return errorResponse('Caixinha já foi ativada', 400, 'CAIXINHA_JA_ATIVA');
   }
 
-  // Valida pontos completos
-  const pontosIncompletos = caixinha.pontos.filter((p) => {
-    const soma = p.cotas.reduce((acc, c) => acc + c.valor, 0);
-    return soma !== p.valor || p.cotas.length === 0;
-  });
+  // Pontos vazios geram aviso mas nao bloqueiam
+  const pontosComCotistas = caixinha.pontos.filter((p) => p.cotas.length > 0);
 
-  if (pontosIncompletos.length > 0) {
+  if (pontosComCotistas.length === 0) {
     return errorResponse(
-      `${pontosIncompletos.length} ponto(s) com cotas incompletas`,
+      'Pelo menos 1 ponto precisa ter cotistas pra ativar',
       400,
-      'PONTOS_INCOMPLETOS',
+      'SEM_COTISTAS',
     );
   }
 
-  // Datas de vencimento = data de contemplação de cada ponto
+  // Datas = todas as datas de contemplacao definidas
   const datasParcelas = caixinha.pontos
     .map((p) => p.dataContemplacao)
     .filter((d): d is Date => d !== null);
@@ -54,14 +53,14 @@ export const POST = withErrorHandling(async (req: NextRequest, { params }: Ctx) 
     return errorResponse('Pontos sem data de contemplação', 400, 'SEM_DATAS');
   }
 
-  // Para cada cota, cria N pagamentos (1 por mês)
+  // Pra cada cota dos pontos com cotistas, cria pagamentos pra cada data
   const operacoes: Array<{
     cotaId: string;
     dataVencimento: Date;
     valorDevido: number;
   }> = [];
 
-  for (const ponto of caixinha.pontos) {
+  for (const ponto of pontosComCotistas) {
     for (const cota of ponto.cotas) {
       for (const dataVenc of datasParcelas) {
         operacoes.push({
@@ -88,8 +87,18 @@ export const POST = withErrorHandling(async (req: NextRequest, { params }: Ctx) 
     categoria: AUDIT.CAIXINHA_ATIVADA,
     acao: `Ativou caixinha "${caixinha.nome}" com ${operacoes.length} pagamentos`,
     usuarioId: admin.sub,
-    metadata: { caixinhaId: caixinha.id, pagamentosGerados: operacoes.length },
+    metadata: {
+      caixinhaId: caixinha.id,
+      pagamentosGerados: operacoes.length,
+      pontosComCotistas: pontosComCotistas.length,
+      pontosVazios: caixinha.pontos.length - pontosComCotistas.length,
+    },
   });
 
-  return NextResponse.json({ ok: true, pagamentosGerados: operacoes.length });
+  return NextResponse.json({
+    ok: true,
+    pagamentosGerados: operacoes.length,
+    pontosComCotistas: pontosComCotistas.length,
+    pontosVazios: caixinha.pontos.length - pontosComCotistas.length,
+  });
 });

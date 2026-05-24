@@ -10,8 +10,6 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
-// ENUMS
-
 enum Role {
   ADMIN
   USER
@@ -55,12 +53,10 @@ enum StatusParcelaEmprestimo {
   ATRASADO
 }
 
-// USUARIOS
-
 model Usuario {
   id             String  @id @default(cuid())
   nomeCompleto   String
-  cpf            String  @unique
+  cpf            String? @unique
   senhaHash      String?
   role           Role    @default(USER)
   perfilCompleto Boolean @default(false)
@@ -99,15 +95,13 @@ model RefreshToken {
   @@map("refresh_tokens")
 }
 
-// CAIXINHAS
-
 model Caixinha {
   id            String         @id @default(cuid())
   nome          String
   observacao    String?
   status        StatusCaixinha @default(RASCUNHO)
   dataAtivacao  DateTime?
-  diaPagamento  Int            // dia do mes do pagamento (1-31)
+  diaPagamento  Int
 
   criadoEm     DateTime @default(now())
   atualizadoEm DateTime @updatedAt
@@ -169,8 +163,6 @@ model PagamentoCota {
   @@map("pagamentos_cota")
 }
 
-// EMPRESTIMOS
-
 model Emprestimo {
   id                    String           @id @default(cuid())
   usuarioId             String
@@ -218,8 +210,6 @@ model ParcelaEmprestimo {
   @@index([status])
   @@map("parcelas_emprestimo")
 }
-
-// AUDITORIA
 
 model Auditoria {
   id        String   @id @default(cuid())

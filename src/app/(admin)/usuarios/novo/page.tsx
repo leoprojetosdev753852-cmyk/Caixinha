@@ -2,20 +2,17 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { IMaskInput } from 'react-imask';
 import { Loader2, UserPlus } from 'lucide-react';
 import { apiFetch, ApiError } from '@/lib/api-client';
 import { useToast } from '@/components/ui/toast';
 import { Input, Label } from '@/components/ui/input';
 import { Header } from '@/components/layouts/header';
-import { limparCPF, validarCPF } from '@/shared';
 
 export default function NovoUsuarioPage() {
   const router = useRouter();
   const toast = useToast();
 
   const [nome, setNome] = useState('');
-  const [cpf, setCpf] = useState('');
   const [erro, setErro] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -23,15 +20,10 @@ export default function NovoUsuarioPage() {
     e.preventDefault();
     setErro(null);
 
-    const cpfLimpo = limparCPF(cpf);
     const nomeLimpo = nome.trim();
 
     if (nomeLimpo.length < 3) {
       setErro('Digite o nome completo');
-      return;
-    }
-    if (!validarCPF(cpfLimpo)) {
-      setErro('CPF inválido');
       return;
     }
 
@@ -41,7 +33,7 @@ export default function NovoUsuarioPage() {
         usuario: { id: string; nomeCompleto: string };
       }>('/api/admin/usuarios', {
         method: 'POST',
-        body: { nomeCompleto: nomeLimpo, cpf: cpfLimpo },
+        body: { nomeCompleto: nomeLimpo },
       });
 
       if (!result?.usuario?.id) {
@@ -54,9 +46,6 @@ export default function NovoUsuarioPage() {
       let msg = 'Erro inesperado';
       if (err instanceof ApiError) {
         msg = err.message || msg;
-        if (err.code === 'DUPLICATE_CPF') {
-          msg = 'Já existe usuário com este CPF';
-        }
       } else if (err instanceof Error) {
         msg = err.message;
       }
@@ -79,7 +68,7 @@ export default function NovoUsuarioPage() {
         </div>
 
         <p className="text-center text-sm text-muted-foreground">
-          O usuário criará a senha e cadastrará o PIX no primeiro acesso.
+          Cadastro rápido. O usuário fornece CPF e cria senha no primeiro acesso.
         </p>
 
         <div className="space-y-2">
@@ -90,19 +79,7 @@ export default function NovoUsuarioPage() {
             onChange={(e) => setNome(e.target.value)}
             placeholder="Ex: João da Silva"
             autoComplete="name"
-          />
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="cpf">CPF</Label>
-          <IMaskInput
-            id="cpf"
-            mask="000.000.000-00"
-            value={cpf}
-            onAccept={(value: string) => setCpf(value)}
-            placeholder="000.000.000-00"
-            inputMode="numeric"
-            className="flex h-12 w-full rounded-md border border-input bg-background px-4 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            autoFocus
           />
         </div>
 
@@ -114,7 +91,7 @@ export default function NovoUsuarioPage() {
 
         <button
           type="submit"
-          disabled={loading || !nome || !cpf}
+          disabled={loading || nome.trim().length < 3}
           className="flex h-12 w-full items-center justify-center rounded-md bg-primary px-4 text-base font-medium text-primary-foreground transition hover:bg-primary/90 disabled:opacity-50"
         >
           {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : 'Cadastrar usuário'}

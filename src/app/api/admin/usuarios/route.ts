@@ -48,16 +48,20 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
   const admin = await requireAdmin(req.headers.get('authorization'));
 
   const body = await req.json();
-  const { nomeCompleto, cpf } = criarUsuarioSchema.parse(body);
+  const parsed = criarUsuarioSchema.parse(body);
+  const cpf = parsed.cpf && parsed.cpf.length === 11 ? parsed.cpf : null;
 
-  const existente = await prisma.usuario.findUnique({ where: { cpf } });
-  if (existente) {
-    return errorResponse('Já existe um usuário com este CPF', 409, 'DUPLICATE_CPF');
+  // Se forneceu CPF, valida duplicidade
+  if (cpf) {
+    const existente = await prisma.usuario.findUnique({ where: { cpf } });
+    if (existente) {
+      return errorResponse('Já existe um usuário com este CPF', 409, 'DUPLICATE_CPF');
+    }
   }
 
   const novo = await prisma.usuario.create({
     data: {
-      nomeCompleto,
+      nomeCompleto: parsed.nomeCompleto,
       cpf,
       role: 'USER',
       perfilCompleto: false,
@@ -76,7 +80,7 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
 
   await registrarAuditoria({
     categoria: AUDIT.USUARIO_CRIADO,
-    acao: `Admin criou usuário ${novo.nomeCompleto} (CPF ${novo.cpf})`,
+    acao: `Admin criou usuário ${novo.nomeCompleto}${cpf ? ` (CPF ${cpf})` : ''}`,
     usuarioId: admin.sub,
     metadata: { usuarioCriadoId: novo.id },
   });
