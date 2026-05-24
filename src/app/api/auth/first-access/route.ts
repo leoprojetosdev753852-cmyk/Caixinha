@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import bcrypt from 'bcryptjs';
+import bcrypt from 'bcrypt';
 import { prisma } from '@/lib/prisma';
 import { withErrorHandling, errorResponse } from '@/lib/api-helpers';
 import { limparCPF, validarCPF } from '@/shared';
