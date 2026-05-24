@@ -1,5 +1,5 @@
 // Schema do banco — Caixinha
-// Otimizado para Supabase (com connection pooling)
+// Inclui Fases 1 (usuários) + 2 (caixinhas com pontos compartilhados) + 3 (empréstimos)
 
 generator client {
   provider = "prisma-client-js"
@@ -28,20 +28,33 @@ enum TipoChavePix {
 }
 
 enum StatusCaixinha {
-  ATIVA
-  CONCLUIDA
-  CANCELADA
+  RASCUNHO   // criada, admin configurando
+  ATIVA      // ativada, pagamentos rolando
+  CONCLUIDA  // todos pagamentos quitados
+  CANCELADA  // encerrada manualmente
 }
 
-enum StatusPagamentoPonto {
+enum StatusPagamentoCaixinha {
   PENDENTE
   PAGO
   ATRASADO
 }
 
+enum TipoEmprestimo {
+  A_VISTA     // parcela única (valor + juros, vence numa data)
+  PARCELADO   // N parcelas mensais
+}
+
 enum StatusEmprestimo {
   ATIVO
   QUITADO
+  ATRASADO
+  CANCELADO
+}
+
+enum StatusParcelaEmprestimo {
+  PENDENTE
+  PAGO
   ATRASADO
 }
 
@@ -68,10 +81,10 @@ model Usuario {
   criadoPor       Usuario?  @relation("UsuariosCriados", fields: [criadoPorId], references: [id])
   usuariosCriados Usuario[] @relation("UsuariosCriados")
 
-  pontosCaixinha PontoCaixinha[]
-  emprestimos    Emprestimo[]
-  refreshTokens  RefreshToken[]
-  auditorias     Auditoria[]
+  cotas         CotaPonto[]
+  emprestimos   Emprestimo[]
+  refreshTokens RefreshToken[]
+  auditorias    Auditoria[]
 
   @@index([cpf])
   @@map("usuarios")
@@ -92,21 +105,15 @@ model RefreshToken {
 }
 
 // ============================================
-// CAIXINHAS
+// CAIXINHAS (consórcio com pontos compartilhados)
 // ============================================
 
 model Caixinha {
   id               String         @id @default(cuid())
   nome             String
-  valorTotal       Int
-  quantidadePontos Int
-  valorPorPonto    Int
-  diaPagamento     Int
-  duracaoMeses     Int
-  dataInicio       DateTime
-  status           StatusCaixinha @default(ATIVA)
-
-  observacao String?
+  observacao       String?
+  status           StatusCaixinha @default(RASCUNHO)
+  dataAtivacao     DateTime?
 
   criadoEm     DateTime @default(now())
   atualizadoEm DateTime @updatedAt
@@ -117,75 +124,121 @@ model Caixinha {
 }
 
 model PontoCaixinha {
-  id         String   @id @default(cuid())
-  caixinhaId String
-  caixinha   Caixinha @relation(fields: [caixinhaId], references: [id], onDelete: Cascade)
-  numero     Int
+  id              String    @id @default(cuid())
+  caixinhaId      String
+  caixinha        Caixinha  @relation(fields: [caixinhaId], references: [id], onDelete: Cascade)
+  numero          Int       // 1, 2, 3...
+  valor           Int       // valor TOTAL do ponto em centavos (admin define)
+  dataContemplacao DateTime? // quando esse ponto "recebe o bolão" (admin define)
 
-  usuarioId String?
-  usuario   Usuario? @relation(fields: [usuarioId], references: [id])
-
-  mesContemplacao Int
-
-  alocadoEm DateTime?
-
-  pagamentos PagamentoPonto[]
+  cotas CotaPonto[]
 
   @@unique([caixinhaId, numero])
-  @@index([usuarioId])
   @@map("pontos_caixinha")
 }
 
-model PagamentoPonto {
-  id      String        @id @default(cuid())
-  pontoId String
-  ponto   PontoCaixinha @relation(fields: [pontoId], references: [id], onDelete: Cascade)
+/**
+ * Cota representa um usuário participando de um ponto.
+ * Um ponto pode ter 1 ou N cotas (compartilhado).
+ * Soma de cotas.valor deve = ponto.valor
+ */
+model CotaPonto {
+  id        String        @id @default(cuid())
+  pontoId   String
+  ponto     PontoCaixinha @relation(fields: [pontoId], references: [id], onDelete: Cascade)
+  usuarioId String
+  usuario   Usuario       @relation(fields: [usuarioId], references: [id])
 
-  mesReferencia  Int
+  valor Int  // valor da cota em centavos (admin define manualmente)
+
+  criadoEm DateTime @default(now())
+
+  pagamentos PagamentoCota[]
+
+  @@index([usuarioId])
+  @@index([pontoId])
+  @@map("cotas_ponto")
+}
+
+/**
+ * Pagamento mensal de uma cota.
+ * Quando admin ativa a caixinha, gera 1 pagamento por (cota × mês de duração).
+ */
+model PagamentoCota {
+  id     String    @id @default(cuid())
+  cotaId String
+  cota   CotaPonto @relation(fields: [cotaId], references: [id], onDelete: Cascade)
+
   valorDevido    Int
-  status         StatusPagamentoPonto @default(PENDENTE)
   dataVencimento DateTime
+  status         StatusPagamentoCaixinha @default(PENDENTE)
   dataPagamento  DateTime?
   observacao     String?
 
   baixadoPorId String?
   criadoEm     DateTime @default(now())
 
-  @@unique([pontoId, mesReferencia])
+  @@index([cotaId])
   @@index([status])
   @@index([dataVencimento])
-  @@map("pagamentos_ponto")
+  @@map("pagamentos_cota")
 }
 
 // ============================================
-// EMPRÉSTIMOS
+// EMPRÉSTIMOS (à vista ou parcelados)
 // ============================================
 
 model Emprestimo {
   id                    String           @id @default(cuid())
   usuarioId             String
   usuario               Usuario          @relation(fields: [usuarioId], references: [id])
-  valorOriginal         Int
+  tipo                  TipoEmprestimo
+  valorOriginal         Int              // valor emprestado em centavos
   percentualJuros       Decimal          @db.Decimal(5, 2)
   percentualJurosAtraso Decimal          @db.Decimal(5, 2)
-  dataVencimento        DateTime
   observacao            String?
 
-  valorPago     Int       @default(0)
-  dataPagamento DateTime?
-  diasAtraso    Int       @default(0)
+  // Para A_VISTA
+  dataVencimento DateTime?
+  valorPago      Int       @default(0)
+  dataPagamento  DateTime?
+  diasAtraso     Int       @default(0)
 
   status StatusEmprestimo @default(ATIVO)
-
-  baixadoPorId String?
 
   criadoEm     DateTime @default(now())
   atualizadoEm DateTime @updatedAt
 
+  parcelas ParcelaEmprestimo[]
+
   @@index([usuarioId])
   @@index([status])
-  @@index([dataVencimento])
   @@map("emprestimos")
+}
+
+/**
+ * Parcelas de empréstimo PARCELADO.
+ * Admin define data de vencimento e valor de cada parcela manualmente.
+ */
+model ParcelaEmprestimo {
+  id           String     @id @default(cuid())
+  emprestimoId String
+  emprestimo   Emprestimo @relation(fields: [emprestimoId], references: [id], onDelete: Cascade)
+
+  numero         Int
+  valorDevido    Int
+  dataVencimento DateTime
+  status         StatusParcelaEmprestimo @default(PENDENTE)
+  valorPago      Int      @default(0)
+  dataPagamento  DateTime?
+  diasAtraso     Int      @default(0)
+
+  baixadoPorId String?
+  criadoEm     DateTime @default(now())
+
+  @@unique([emprestimoId, numero])
+  @@index([status])
+  @@map("parcelas_emprestimo")
 }
 
 // ============================================
