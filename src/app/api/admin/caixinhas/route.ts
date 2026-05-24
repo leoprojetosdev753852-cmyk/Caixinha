@@ -78,18 +78,22 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
   const body = await req.json();
   const data = criarCaixinhaSchema.parse(body);
 
-  // Calcula valor por ponto (rateio igual default)
   const valorPorPonto = Math.floor(data.valorTotal / data.quantidadePontos);
   if (valorPorPonto <= 0) {
     return errorResponse('Valor por ponto resultou em zero', 400, 'INVALID_INPUT');
   }
 
-  // Cria caixinha + N pontos numerados de 1 a N, todos com mesmo valor
-  const pontosArray = Array.from({ length: data.quantidadePontos }, (_, i) => ({
-    numero: i + 1,
-    valor: valorPorPonto,
-    dataContemplacao: null,
-  }));
+  // Cria caixinha + N pontos, cada um com dataContemplacao no mes correspondente
+  // Ponto 1 = mesInicio, Ponto 2 = mesInicio+1, ...
+  const pontosArray = Array.from({ length: data.quantidadePontos }, (_, i) => {
+    // Math: cria Date no fuso local, sem timezone bugs
+    const dataPonto = new Date(data.anoInicio, data.mesInicio - 1 + i, data.diaPagamento);
+    return {
+      numero: i + 1,
+      valor: valorPorPonto,
+      dataContemplacao: dataPonto,
+    };
+  });
 
   const caixinha = await prisma.caixinha.create({
     data: {

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import {
   Loader2,
   UserPlus,
@@ -11,7 +12,6 @@ import {
   Circle,
   Play,
   AlertCircle,
-  Plus,
 } from 'lucide-react';
 import { apiFetch, ApiError } from '@/lib/api-client';
 import { useToast } from '@/components/ui/toast';
@@ -72,26 +72,29 @@ export default function CaixinhaDetalhePage({ params }: PageProps) {
   const [caixinha, setCaixinha] = useState<Caixinha | null>(null);
   const [loading, setLoading] = useState(true);
   const [usuarios, setUsuarios] = useState<UsuarioOpcao[]>([]);
+  const [loadingUsuarios, setLoadingUsuarios] = useState(true);
 
-  // Modal alocar cota
-  const [modalCota, setModalCota] = useState<{ pontoId: string } | null>(null);
+  const [modalCota, setModalCota] = useState<{ pontoId: string; valorRestante: number } | null>(
+    null,
+  );
   const [usuarioSelecionado, setUsuarioSelecionado] = useState('');
   const [valorCotaStr, setValorCotaStr] = useState('');
   const [valorCotaRaw, setValorCotaRaw] = useState(0);
   const [salvandoCota, setSalvandoCota] = useState(false);
 
-  // Modal ativar
   const [modalAtivar, setModalAtivar] = useState(false);
   const [ativando, setAtivando] = useState(false);
 
-  // Modal editar ponto
-  const [modalPonto, setModalPonto] = useState<{ pontoId: string; valor: number; data: string } | null>(null);
+  const [modalPonto, setModalPonto] = useState<{
+    pontoId: string;
+    valor: number;
+    data: string;
+  } | null>(null);
   const [editValorStr, setEditValorStr] = useState('');
   const [editValor, setEditValor] = useState(0);
   const [editData, setEditData] = useState('');
   const [salvandoPonto, setSalvandoPonto] = useState(false);
 
-  // Modal baixar
   const [modalBaixa, setModalBaixa] = useState<{ pagamentoId: string } | null>(null);
   const [dataPag, setDataPag] = useState(toInputDate(new Date()));
   const [obsPag, setObsPag] = useState('');
@@ -109,12 +112,27 @@ export default function CaixinhaDetalhePage({ params }: PageProps) {
     }
   };
 
+  const carregarUsuarios = async () => {
+    setLoadingUsuarios(true);
+    try {
+      // Tira filtro 'apenas=ativos' pra mostrar tudo
+      const r = await apiFetch<{ usuarios: UsuarioOpcao[] }>(
+        '/api/admin/usuarios?apenas=todos',
+      );
+      console.log('[caixinha] usuarios carregados:', r.usuarios?.length);
+      setUsuarios(r.usuarios || []);
+    } catch (err) {
+      console.error('[caixinha] erro ao carregar usuarios:', err);
+      setUsuarios([]);
+    } finally {
+      setLoadingUsuarios(false);
+    }
+  };
+
   useEffect(() => {
     if (!id) return;
     carregar();
-    apiFetch<{ usuarios: UsuarioOpcao[] }>('/api/admin/usuarios?apenas=ativos')
-      .then((r) => setUsuarios(r.usuarios || []))
-      .catch(() => {});
+    carregarUsuarios();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
@@ -138,24 +156,35 @@ export default function CaixinhaDetalhePage({ params }: PageProps) {
   }).length;
   const podeAtivar = isRascunho && pontosCompletos === caixinha.pontos.length;
 
-  const abrirModalCota = (pontoId: string) => {
-    setModalCota({ pontoId });
+  const abrirModalCota = (ponto: Ponto) => {
+    const soma = ponto.cotas.reduce((acc, c) => acc + c.valor, 0);
+    const restante = ponto.valor - soma;
+    setModalCota({ pontoId: ponto.id, valorRestante: restante });
     setUsuarioSelecionado('');
-    setValorCotaStr('');
-    setValorCotaRaw(0);
+    // Preenche valor padrão = restante
+    setValorCotaStr((restante / 100).toFixed(2).replace('.', ','));
+    setValorCotaRaw(restante);
   };
 
   const handleSalvarCota = async () => {
-    if (!modalCota || !usuarioSelecionado || valorCotaRaw <= 0) {
-      toast.error('Preencha todos os campos');
+    if (!modalCota) return;
+    if (!usuarioSelecionado) {
+      toast.error('Selecione um usuário');
+      return;
+    }
+    if (valorCotaRaw <= 0) {
+      toast.error('Valor inválido');
       return;
     }
     setSalvandoCota(true);
     try {
-      await apiFetch(`/api/admin/caixinhas/${id}/pontos/${modalCota.pontoId}/cotas`, {
-        method: 'POST',
-        body: { usuarioId: usuarioSelecionado, valor: valorCotaRaw },
-      });
+      await apiFetch(
+        `/api/admin/caixinhas/${id}/pontos/${modalCota.pontoId}/cotas`,
+        {
+          method: 'POST',
+          body: { usuarioId: usuarioSelecionado, valor: valorCotaRaw },
+        },
+      );
       toast.success('Cota adicionada!');
       setModalCota(null);
       carregar();
@@ -252,7 +281,6 @@ export default function CaixinhaDetalhePage({ params }: PageProps) {
       <Header title={caixinha.nome} showBack />
 
       <div className="space-y-4 px-4 py-4">
-        {/* Header info */}
         <div className="rounded-lg border border-border bg-card p-4">
           <div className="flex items-start justify-between gap-2">
             <div>
@@ -276,7 +304,6 @@ export default function CaixinhaDetalhePage({ params }: PageProps) {
           </p>
         </div>
 
-        {/* Botão ativar */}
         {isRascunho && (
           <button
             onClick={() => setModalAtivar(true)}
@@ -290,7 +317,6 @@ export default function CaixinhaDetalhePage({ params }: PageProps) {
           </button>
         )}
 
-        {/* Lista pontos */}
         <div className="space-y-3">
           {caixinha.pontos.map((p) => {
             const somaCotas = p.cotas.reduce((acc, c) => acc + c.valor, 0);
@@ -332,7 +358,6 @@ export default function CaixinhaDetalhePage({ params }: PageProps) {
                   )}
                 </div>
 
-                {/* Cotas */}
                 {p.cotas.length > 0 && (
                   <div className="space-y-2">
                     {p.cotas.map((cota) => {
@@ -410,14 +435,13 @@ export default function CaixinhaDetalhePage({ params }: PageProps) {
                   </div>
                 )}
 
-                {/* Botão adicionar cotista */}
                 {isRascunho && !completo && (
                   <button
-                    onClick={() => abrirModalCota(p.id)}
+                    onClick={() => abrirModalCota(p)}
                     className="flex h-10 w-full items-center justify-center gap-2 rounded-md border-2 border-dashed border-border bg-background text-sm font-medium text-muted-foreground hover:bg-accent"
                   >
                     <UserPlus className="h-4 w-4" /> Adicionar cotista
-                    {p.cotas.length > 0 && ` (compartilhar — falta ${formatarBRL(restante)})`}
+                    {p.cotas.length > 0 && ` (falta ${formatarBRL(restante)})`}
                   </button>
                 )}
               </div>
@@ -426,44 +450,74 @@ export default function CaixinhaDetalhePage({ params }: PageProps) {
         </div>
       </div>
 
-      {/* Modal adicionar cota */}
+      {/* Modal adicionar cotista */}
       <Modal open={!!modalCota} onClose={() => setModalCota(null)} title="Adicionar cotista">
         <div className="space-y-4">
-          <div className="space-y-2">
-            <Label>Usuário</Label>
-            <select
-              value={usuarioSelecionado}
-              onChange={(e) => setUsuarioSelecionado(e.target.value)}
-              className="flex h-12 w-full rounded-md border border-input bg-background px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              <option value="">Selecione</option>
-              {usuarios.map((u) => (
-                <option key={u.id} value={u.id}>
-                  {u.nomeCompleto} · {formatarCPF(u.cpf)}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="space-y-2">
-            <Label>Valor da cota</Label>
-            <MoneyInput
-              value={valorCotaStr}
-              onChange={(str, raw) => {
-                setValorCotaStr(str);
-                setValorCotaRaw(raw);
-              }}
-            />
-            <p className="text-xs text-muted-foreground">
-              Se quiser dividir o ponto, defina aqui só a parte deste cotista. Adicione outros depois.
-            </p>
-          </div>
-          <button
-            onClick={handleSalvarCota}
-            disabled={salvandoCota}
-            className="flex h-12 w-full items-center justify-center rounded-md bg-primary text-base font-medium text-primary-foreground disabled:opacity-50"
-          >
-            {salvandoCota ? <Loader2 className="h-5 w-5 animate-spin" /> : 'Adicionar'}
-          </button>
+          {loadingUsuarios && (
+            <div className="flex justify-center py-4">
+              <Loader2 className="h-5 w-5 animate-spin text-primary" />
+            </div>
+          )}
+
+          {!loadingUsuarios && usuarios.length === 0 && (
+            <div className="space-y-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm">
+              <p className="font-medium text-amber-900">Nenhum usuário cadastrado</p>
+              <p className="text-xs text-amber-800">
+                Você precisa cadastrar usuários primeiro pra poder alocá-los na caixinha.
+              </p>
+              <Link
+                href="/usuarios/novo"
+                className="inline-block rounded-md bg-amber-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-950"
+              >
+                Cadastrar usuário
+              </Link>
+            </div>
+          )}
+
+          {!loadingUsuarios && usuarios.length > 0 && (
+            <>
+              <div className="space-y-2">
+                <Label>Usuário</Label>
+                <select
+                  value={usuarioSelecionado}
+                  onChange={(e) => setUsuarioSelecionado(e.target.value)}
+                  className="flex h-12 w-full rounded-md border border-input bg-background px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <option value="">Selecione</option>
+                  {usuarios.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.nomeCompleto} · {formatarCPF(u.cpf)}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-muted-foreground">
+                  {usuarios.length} usuário{usuarios.length > 1 ? 's' : ''} cadastrado{usuarios.length > 1 ? 's' : ''}
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label>Valor da cota</Label>
+                <MoneyInput
+                  value={valorCotaStr}
+                  onChange={(str, raw) => {
+                    setValorCotaStr(str);
+                    setValorCotaRaw(raw);
+                  }}
+                />
+                {modalCota && (
+                  <p className="text-xs text-muted-foreground">
+                    Valor restante do ponto: {formatarBRL(modalCota.valorRestante)}
+                  </p>
+                )}
+              </div>
+              <button
+                onClick={handleSalvarCota}
+                disabled={salvandoCota || !usuarioSelecionado || valorCotaRaw <= 0}
+                className="flex h-12 w-full items-center justify-center rounded-md bg-primary text-base font-medium text-primary-foreground disabled:opacity-50"
+              >
+                {salvandoCota ? <Loader2 className="h-5 w-5 animate-spin" /> : 'Adicionar'}
+              </button>
+            </>
+          )}
         </div>
       </Modal>
 
@@ -481,15 +535,13 @@ export default function CaixinhaDetalhePage({ params }: PageProps) {
             />
           </div>
           <div className="space-y-2">
-            <Label>Data de contemplação (opcional)</Label>
+            <Label>Data de contemplação</Label>
             <Input
               type="date"
               value={editData}
               onChange={(e) => setEditData(e.target.value)}
             />
-            <p className="text-xs text-muted-foreground">
-              Quando este ponto recebe o bolão.
-            </p>
+            <p className="text-xs text-muted-foreground">Quando este ponto recebe o bolão.</p>
           </div>
           <button
             onClick={handleSalvarPonto}
@@ -508,8 +560,7 @@ export default function CaixinhaDetalhePage({ params }: PageProps) {
             <AlertCircle className="h-4 w-4 shrink-0" />
             <p>
               Ao ativar, sistema gera automaticamente {caixinha.pontos.length} pagamentos para cada
-              cotista (1 por mês, no dia {caixinha.diaPagamento}). Você não pode editar pontos ou
-              cotas depois.
+              cotista. Você não pode editar pontos ou cotas depois.
             </p>
           </div>
 
@@ -546,7 +597,7 @@ export default function CaixinhaDetalhePage({ params }: PageProps) {
         </div>
       </Modal>
 
-      {/* Modal baixar pagamento */}
+      {/* Modal baixar */}
       <Modal open={!!modalBaixa} onClose={() => setModalBaixa(null)} title="Baixar pagamento">
         <div className="space-y-4">
           <div className="space-y-2">

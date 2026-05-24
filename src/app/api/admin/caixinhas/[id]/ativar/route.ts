@@ -9,10 +9,9 @@ interface Ctx {
 }
 
 /**
- * Ativa a caixinha. Sistema gera pagamentos automaticamente:
- * - Quantidade de parcelas = quantidade de pontos
- * - Cada parcela vence no diaPagamento de cada mes consecutivo
- * - Data inicial = primeira dataContemplacao definida (ou hoje + 1 mes se nenhuma)
+ * Ativa caixinha. Cada cotista paga em todas as datas de contemplação dos pontos da caixinha.
+ * Ex: Caixinha de 10 pontos com datas jan/2025, fev/2025, ..., out/2025.
+ * Cada cotista gera 10 pagamentos, um para cada dessas datas.
  */
 export const POST = withErrorHandling(async (req: NextRequest, { params }: Ctx) => {
   const admin = await requireAdmin(req.headers.get('authorization'));
@@ -32,7 +31,7 @@ export const POST = withErrorHandling(async (req: NextRequest, { params }: Ctx) 
     return errorResponse('Caixinha já foi ativada', 400, 'CAIXINHA_JA_ATIVA');
   }
 
-  // Valida que TODOS os pontos têm cotas que somam o valor do ponto
+  // Valida pontos completos
   const pontosIncompletos = caixinha.pontos.filter((p) => {
     const soma = p.cotas.reduce((acc, c) => acc + c.valor, 0);
     return soma !== p.valor || p.cotas.length === 0;
@@ -40,28 +39,19 @@ export const POST = withErrorHandling(async (req: NextRequest, { params }: Ctx) 
 
   if (pontosIncompletos.length > 0) {
     return errorResponse(
-      `${pontosIncompletos.length} ponto(s) com cotas incompletas. Todos os pontos precisam ter cotistas que somam o valor do ponto.`,
+      `${pontosIncompletos.length} ponto(s) com cotas incompletas`,
       400,
       'PONTOS_INCOMPLETOS',
     );
   }
 
-  // Determina mes inicial: primeira dataContemplacao definida, ou proximo mes
-  let mesInicial: Date;
-  const primeiraContemplacao = caixinha.pontos.find((p) => p.dataContemplacao)?.dataContemplacao;
-  if (primeiraContemplacao) {
-    mesInicial = new Date(primeiraContemplacao);
-  } else {
-    mesInicial = new Date();
-    mesInicial.setMonth(mesInicial.getMonth() + 1);
-  }
+  // Datas de vencimento = data de contemplação de cada ponto
+  const datasParcelas = caixinha.pontos
+    .map((p) => p.dataContemplacao)
+    .filter((d): d is Date => d !== null);
 
-  // Gera N datas de vencimento (1 por ponto = duração total)
-  const totalParcelas = caixinha.pontos.length;
-  const datasParcelas: Date[] = [];
-  for (let i = 0; i < totalParcelas; i++) {
-    const data = new Date(mesInicial.getFullYear(), mesInicial.getMonth() + i, caixinha.diaPagamento);
-    datasParcelas.push(data);
+  if (datasParcelas.length === 0) {
+    return errorResponse('Pontos sem data de contemplação', 400, 'SEM_DATAS');
   }
 
   // Para cada cota, cria N pagamentos (1 por mês)
@@ -83,20 +73,7 @@ export const POST = withErrorHandling(async (req: NextRequest, { params }: Ctx) 
     }
   }
 
-  // Define data de contemplação dos pontos que não têm: ponto 1 = mes 1, ponto 2 = mes 2, etc
-  const pontosSemData = caixinha.pontos
-    .map((p, idx) => ({ p, idx }))
-    .filter(({ p }) => !p.dataContemplacao);
-
   await prisma.$transaction(async (tx) => {
-    // Atualiza data de contemplação dos pontos
-    for (const { p, idx } of pontosSemData) {
-      await tx.pontoCaixinha.update({
-        where: { id: p.id },
-        data: { dataContemplacao: datasParcelas[idx] },
-      });
-    }
-
     await tx.caixinha.update({
       where: { id: params.id },
       data: { status: 'ATIVA', dataAtivacao: new Date() },
@@ -114,5 +91,5 @@ export const POST = withErrorHandling(async (req: NextRequest, { params }: Ctx) 
     metadata: { caixinhaId: caixinha.id, pagamentosGerados: operacoes.length },
   });
 
-  return NextResponse.json({ ok: true, pagamentosGerados: operacoes.length, totalParcelas });
+  return NextResponse.json({ ok: true, pagamentosGerados: operacoes.length });
 });
