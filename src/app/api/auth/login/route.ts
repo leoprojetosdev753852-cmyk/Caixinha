@@ -20,6 +20,9 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
     return errorResponse('CPF ou senha inválidos', 401, 'INVALID_CREDENTIALS');
   }
 
+  if (!usuario.cpf) {
+    return errorResponse('Usuario sem CPF cadastrado', 500, 'NO_CPF');
+  }
   const { accessToken, refreshToken } = await createSession(usuario.id, usuario.cpf, usuario.role);
 
   const response = NextResponse.json({
