@@ -57,6 +57,7 @@ model Usuario {
   id             String  @id @default(cuid())
   nomeCompleto   String
   cpf            String? @unique
+  username       String? @unique
   senhaHash      String?
   role           Role    @default(USER)
   perfilCompleto Boolean @default(false)
@@ -78,6 +79,7 @@ model Usuario {
   auditorias    Auditoria[]
 
   @@index([cpf])
+  @@index([username])
   @@map("usuarios")
 }
 
