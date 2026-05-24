@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { IMaskInput } from 'react-imask';
 import { Loader2, ChevronRight, Eye, EyeOff, Check } from 'lucide-react';
@@ -13,18 +13,17 @@ const TIPOS_PIX = [
   { value: 'CPF', label: 'CPF' },
   { value: 'EMAIL', label: 'E-mail' },
   { value: 'TELEFONE', label: 'Telefone' },
-  { value: 'ALEATORIA', label: 'Chave aleatória' },
+  { value: 'ALEATORIA', label: 'Chave aleatoria' },
 ] as const;
 
 type TipoPix = (typeof TIPOS_PIX)[number]['value'];
 
-export default function PrimeiroAcessoPage() {
+function PrimeiroAcessoContent() {
   const router = useRouter();
   const sp = useSearchParams();
   const toast = useToast();
   const setSession = useAuthStore((s) => s.setSession);
 
-  // Pode vir com ?cpf= ou ?convite=
   const conviteId = sp.get('convite');
   const cpfQuery = sp.get('cpf');
 
@@ -32,7 +31,6 @@ export default function PrimeiroAcessoPage() {
   const [loading, setLoading] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
 
-  // dados
   const [usuarioId, setUsuarioId] = useState<string | null>(null);
   const [nomeCompleto, setNomeCompleto] = useState('');
   const [precisaCpf, setPrecisaCpf] = useState(false);
@@ -44,7 +42,6 @@ export default function PrimeiroAcessoPage() {
   const [chavePix, setChavePix] = useState('');
   const [aceiteTermos, setAceiteTermos] = useState(false);
 
-  // Inicialização: verifica convite ou CPF
   useEffect(() => {
     const verificar = async () => {
       try {
@@ -54,7 +51,6 @@ export default function PrimeiroAcessoPage() {
         } else if (cpfQuery) {
           body = { cpf: cpfQuery };
         } else {
-          // sem nada na URL — usuário digita CPF no passo 1
           setStep(0);
           return;
         }
@@ -67,7 +63,7 @@ export default function PrimeiroAcessoPage() {
 
         if (!res.ok) {
           const err = await res.json().catch(() => ({}));
-          setErro(err.message || 'Link de acesso inválido');
+          setErro(err.message || 'Link de acesso invalido');
           setStep(-1);
           return;
         }
@@ -75,7 +71,7 @@ export default function PrimeiroAcessoPage() {
         const data = await res.json();
 
         if (data.perfilCompleto) {
-          toast.success('Cadastro já finalizado. Faça login.');
+          toast.success('Cadastro ja finalizado. Faca login.');
           router.push('/login');
           return;
         }
@@ -94,7 +90,6 @@ export default function PrimeiroAcessoPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Tela de erro inicial
   if (step === -1) {
     return (
       <div className="flex min-h-screen items-center justify-center p-4">
@@ -111,12 +106,11 @@ export default function PrimeiroAcessoPage() {
     );
   }
 
-  // Passo 0: digitar CPF (sem convite/cpf na URL)
   if (step === 0) {
     const handleBuscar = async () => {
       const cpfLimpo = limparCPF(cpf);
       if (!validarCPF(cpfLimpo)) {
-        setErro('CPF inválido');
+        setErro('CPF invalido');
         return;
       }
       setLoading(true);
@@ -129,12 +123,12 @@ export default function PrimeiroAcessoPage() {
         });
         if (!res.ok) {
           const err = await res.json().catch(() => ({}));
-          setErro(err.message || 'CPF não encontrado');
+          setErro(err.message || 'CPF nao encontrado');
           return;
         }
         const data = await res.json();
         if (data.perfilCompleto) {
-          toast.success('Cadastro já finalizado. Faça login.');
+          toast.success('Cadastro ja finalizado. Faca login.');
           router.push('/login');
           return;
         }
@@ -153,9 +147,7 @@ export default function PrimeiroAcessoPage() {
         <Toaster />
         <div className="w-full max-w-sm space-y-4">
           <h1 className="text-center text-xl font-bold">Primeiro acesso</h1>
-          <p className="text-center text-sm text-muted-foreground">
-            Digite seu CPF para começar
-          </p>
+          <p className="text-center text-sm text-muted-foreground">Digite seu CPF para comecar</p>
           <div className="space-y-2">
             <Label htmlFor="cpf">CPF</Label>
             <IMaskInput
@@ -181,7 +173,6 @@ export default function PrimeiroAcessoPage() {
     );
   }
 
-  // Loading enquanto verifica
   if (step === 1 && !usuarioId) {
     return (
       <div className="flex min-h-screen items-center justify-center">
@@ -190,7 +181,6 @@ export default function PrimeiroAcessoPage() {
     );
   }
 
-  // Fluxo de passos
   const totalSteps = precisaCpf ? 4 : 3;
 
   const handleProximo = () => {
@@ -217,12 +207,10 @@ export default function PrimeiroAcessoPage() {
         tipoChavePix,
         chavePix: chavePix.trim(),
         aceiteTermos: true,
+        cpf: limparCPF(cpf),
       };
       if (conviteId) {
         body.convite = conviteId;
-        body.cpf = limparCPF(cpf);
-      } else {
-        body.cpf = limparCPF(cpf);
       }
 
       const res = await fetch('/api/auth/first-access', {
@@ -250,34 +238,27 @@ export default function PrimeiroAcessoPage() {
     }
   };
 
-  // Estrutura dos passos
   const showCpfStep = precisaCpf && step === 1;
-  const showSenhaStep = (precisaCpf ? step === 2 : step === 1);
-  const showPixStep = (precisaCpf ? step === 3 : step === 2);
-  const showConfirmStep = (precisaCpf ? step === 4 : step === 3);
+  const showSenhaStep = precisaCpf ? step === 2 : step === 1;
+  const showPixStep = precisaCpf ? step === 3 : step === 2;
+  const showConfirmStep = precisaCpf ? step === 4 : step === 3;
 
   return (
     <div className="flex min-h-screen items-center justify-center p-4">
       <Toaster />
       <div className="w-full max-w-sm space-y-4">
         <header className="space-y-1 text-center">
-          <h1 className="text-xl font-bold">Olá, {nomeCompleto.split(' ')[0]}!</h1>
+          <h1 className="text-xl font-bold">Ola, {nomeCompleto.split(' ')[0]}!</h1>
           <p className="text-sm text-muted-foreground">
             Passo {Math.min(step, totalSteps)} de {totalSteps}
           </p>
           <div className="flex gap-1">
             {Array.from({ length: totalSteps }).map((_, i) => (
-              <div
-                key={i}
-                className={`h-1 flex-1 rounded-full ${
-                  i < step ? 'bg-primary' : 'bg-muted'
-                }`}
-              />
+              <div key={i} className={`h-1 flex-1 rounded-full ${i < step ? 'bg-primary' : 'bg-muted'}`} />
             ))}
           </div>
         </header>
 
-        {/* Passo CPF */}
         {showCpfStep && (
           <div className="space-y-3">
             <p className="text-sm">Confirme seu CPF</p>
@@ -293,7 +274,7 @@ export default function PrimeiroAcessoPage() {
             <button
               onClick={() => {
                 if (!validarCPF(limparCPF(cpf))) {
-                  setErro('CPF inválido');
+                  setErro('CPF invalido');
                   return;
                 }
                 handleProximo();
@@ -305,10 +286,9 @@ export default function PrimeiroAcessoPage() {
           </div>
         )}
 
-        {/* Passo Senha */}
         {showSenhaStep && (
           <div className="space-y-3">
-            <p className="text-sm">Crie uma senha (mínimo 8 caracteres)</p>
+            <p className="text-sm">Crie uma senha (minimo 8 caracteres)</p>
             <div className="relative">
               <Input
                 type={verSenha ? 'text' : 'password'}
@@ -342,11 +322,11 @@ export default function PrimeiroAcessoPage() {
               <button
                 onClick={() => {
                   if (senha.length < 8) {
-                    setErro('Senha deve ter mínimo 8 caracteres');
+                    setErro('Senha deve ter minimo 8 caracteres');
                     return;
                   }
                   if (senha !== confirmacaoSenha) {
-                    setErro('Senhas não conferem');
+                    setErro('Senhas nao conferem');
                     return;
                   }
                   handleProximo();
@@ -359,7 +339,6 @@ export default function PrimeiroAcessoPage() {
           </div>
         )}
 
-        {/* Passo PIX */}
         {showPixStep && (
           <div className="space-y-3">
             <p className="text-sm">Configure sua chave PIX (para receber pagamentos)</p>
@@ -369,9 +348,7 @@ export default function PrimeiroAcessoPage() {
                   key={t.value}
                   onClick={() => setTipoChavePix(t.value)}
                   className={`flex h-11 items-center justify-center rounded-md border-2 text-sm font-medium ${
-                    tipoChavePix === t.value
-                      ? 'border-primary bg-primary/5 text-primary'
-                      : 'border-input'
+                    tipoChavePix === t.value ? 'border-primary bg-primary/5 text-primary' : 'border-input'
                   }`}
                 >
                   {t.label}
@@ -415,7 +392,6 @@ export default function PrimeiroAcessoPage() {
           </div>
         )}
 
-        {/* Passo Confirmação */}
         {showConfirmStep && (
           <div className="space-y-3">
             <p className="text-sm font-medium">Confirme seus dados</p>
@@ -447,7 +423,7 @@ export default function PrimeiroAcessoPage() {
                 onChange={(e) => setAceiteTermos(e.target.checked)}
                 className="mt-0.5"
               />
-              <span>Confirmo que os dados acima estão corretos</span>
+              <span>Confirmo que os dados acima estao corretos</span>
             </label>
 
             {erro && <p className="text-sm text-destructive">{erro}</p>}
@@ -477,5 +453,19 @@ export default function PrimeiroAcessoPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function PrimeiroAcessoPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+        </div>
+      }
+    >
+      <PrimeiroAcessoContent />
+    </Suspense>
   );
 }
