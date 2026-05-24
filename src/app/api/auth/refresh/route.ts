@@ -33,6 +33,9 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
     data: { revogado: true },
   });
 
+  if (!tokenDb.usuario.cpf) {
+    return errorResponse('Usuario sem CPF', 401, 'NO_CPF');
+  }
   const { accessToken, refreshToken: newRefresh } = await createSession(
     tokenDb.usuario.id,
     tokenDb.usuario.cpf,
