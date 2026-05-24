@@ -64,17 +64,17 @@ export default function LoginPage() {
             <LogIn className="h-6 w-6" />
           </div>
           <h1 className="text-2xl font-bold">Caixinha</h1>
-          <p className="text-sm text-muted-foreground">Entre com seu CPF ou usuário</p>
+          <p className="text-sm text-muted-foreground">Entre na sua conta</p>
         </header>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="id">CPF ou usuário</Label>
+            <Label htmlFor="id">Identificação</Label>
             <Input
               id="id"
               value={identificador}
               onChange={(e) => setIdentificador(e.target.value)}
-              placeholder="000.000.000-00 ou admcaixa"
+              placeholder="Identificação"
               autoCapitalize="none"
               autoComplete="username"
               autoFocus
