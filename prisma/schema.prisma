@@ -1,4 +1,4 @@
-﻿// Schema do banco — Caixinha
+// Schema do banco — Caixinha
 // Inclui Fases 1 (usuarios) + 2 (caixinhas com pontos compartilhados) + 3 (emprestimos)
 
 generator client {
