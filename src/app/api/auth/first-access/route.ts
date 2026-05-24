@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { withErrorHandling, errorResponse } from '@/lib/api-helpers';
 import { limparCPF, validarCPF } from '@/shared';
 import { registrarAuditoria, AUDIT } from '@/lib/audit';
-import { signTokens, setAuthCookies } from '@/lib/auth';
+import { createSession, getRefreshCookieOptions } from '@/lib/auth';
 
 interface Body {
   cpf?: string;
@@ -23,46 +23,59 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
     return errorResponse('Aceite os termos', 400, 'TERMS_REQUIRED');
   }
   if (!body.senha || body.senha.length < 8) {
-    return errorResponse('Senha deve ter no mínimo 8 caracteres', 400, 'INVALID_PASSWORD');
+    return errorResponse('Senha deve ter no minimo 8 caracteres', 400, 'INVALID_PASSWORD');
   }
   if (body.senha !== body.confirmacaoSenha) {
-    return errorResponse('Senhas não conferem', 400, 'PASSWORD_MISMATCH');
+    return errorResponse('Senhas nao conferem', 400, 'PASSWORD_MISMATCH');
   }
   if (!body.chavePix || body.chavePix.trim().length === 0) {
-    return errorResponse('Chave PIX obrigatória', 400, 'MISSING_PIX');
+    return errorResponse('Chave PIX obrigatoria', 400, 'MISSING_PIX');
   }
 
-  let usuario: { id: string; cpf: string | null; perfilCompleto: boolean; senhaHash: string | null; ativo: boolean } | null = null;
+  let usuario: {
+    id: string;
+    cpf: string | null;
+    perfilCompleto: boolean;
+    senhaHash: string | null;
+    ativo: boolean;
+    role: 'ADMIN' | 'USER';
+    nomeCompleto: string;
+  } | null = null;
 
   // Caminho 1: convite (id direto)
   if (body.convite) {
     usuario = await prisma.usuario.findUnique({
       where: { id: body.convite },
-      select: { id: true, cpf: true, perfilCompleto: true, senhaHash: true, ativo: true },
+      select: {
+        id: true,
+        cpf: true,
+        perfilCompleto: true,
+        senhaHash: true,
+        ativo: true,
+        role: true,
+        nomeCompleto: true,
+      },
     });
 
     if (!usuario || !usuario.ativo) {
-      return errorResponse('Convite inválido', 404, 'INVALID_INVITE');
+      return errorResponse('Convite invalido', 404, 'INVALID_INVITE');
     }
 
-    // Convite exige CPF
     if (!body.cpf) {
-      return errorResponse('CPF obrigatório', 400, 'MISSING_CPF');
+      return errorResponse('CPF obrigatorio', 400, 'MISSING_CPF');
     }
     const cpfLimpo = limparCPF(body.cpf);
     if (cpfLimpo.length !== 11 || !validarCPF(cpfLimpo)) {
-      return errorResponse('CPF inválido', 400, 'INVALID_CPF');
+      return errorResponse('CPF invalido', 400, 'INVALID_CPF');
     }
 
-    // Garante que o CPF não está em uso por outro usuário
     if (usuario.cpf !== cpfLimpo) {
       const conflito = await prisma.usuario.findUnique({ where: { cpf: cpfLimpo } });
       if (conflito && conflito.id !== usuario.id) {
-        return errorResponse('Este CPF já está em uso', 409, 'DUPLICATE_CPF');
+        return errorResponse('Este CPF ja esta em uso', 409, 'DUPLICATE_CPF');
       }
     }
 
-    // Atualiza CPF se diferente do atual
     if (usuario.cpf !== cpfLimpo) {
       await prisma.usuario.update({
         where: { id: usuario.id },
@@ -71,27 +84,38 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
       usuario.cpf = cpfLimpo;
     }
   } else {
-    // Caminho 2: CPF direto (usuario foi cadastrado com CPF)
     if (!body.cpf) {
-      return errorResponse('CPF obrigatório', 400, 'MISSING_CPF');
+      return errorResponse('CPF obrigatorio', 400, 'MISSING_CPF');
     }
     const cpfLimpo = limparCPF(body.cpf);
     if (cpfLimpo.length !== 11 || !validarCPF(cpfLimpo)) {
-      return errorResponse('CPF inválido', 400, 'INVALID_CPF');
+      return errorResponse('CPF invalido', 400, 'INVALID_CPF');
     }
 
     usuario = await prisma.usuario.findUnique({
       where: { cpf: cpfLimpo },
-      select: { id: true, cpf: true, perfilCompleto: true, senhaHash: true, ativo: true },
+      select: {
+        id: true,
+        cpf: true,
+        perfilCompleto: true,
+        senhaHash: true,
+        ativo: true,
+        role: true,
+        nomeCompleto: true,
+      },
     });
 
     if (!usuario || !usuario.ativo) {
-      return errorResponse('Usuário não encontrado', 404, 'NOT_FOUND');
+      return errorResponse('Usuario nao encontrado', 404, 'NOT_FOUND');
     }
   }
 
   if (usuario.perfilCompleto) {
-    return errorResponse('Cadastro já foi finalizado anteriormente', 400, 'ALREADY_COMPLETE');
+    return errorResponse('Cadastro ja foi finalizado anteriormente', 400, 'ALREADY_COMPLETE');
+  }
+
+  if (!usuario.cpf) {
+    return errorResponse('CPF obrigatorio', 400, 'MISSING_CPF');
   }
 
   const senhaHash = await bcrypt.hash(body.senha, 10);
@@ -107,21 +131,22 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
     select: { id: true, cpf: true, nomeCompleto: true, role: true },
   });
 
+  if (!atualizado.cpf) {
+    return errorResponse('Erro ao salvar CPF', 500, 'INTERNAL');
+  }
+
   await registrarAuditoria({
     categoria: AUDIT.USUARIO_ATUALIZADO,
-    acao: `Usuário ${atualizado.nomeCompleto} concluiu primeiro acesso`,
+    acao: `Usuario ${atualizado.nomeCompleto} concluiu primeiro acesso`,
     usuarioId: atualizado.id,
   });
 
-  // Login automático
-  const { accessToken, refreshToken } = await signTokens(atualizado);
-  await prisma.refreshToken.create({
-    data: {
-      token: refreshToken,
-      usuarioId: atualizado.id,
-      expiraEm: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-    },
-  });
+  // Login automatico
+  const { accessToken, refreshToken } = await createSession(
+    atualizado.id,
+    atualizado.cpf,
+    atualizado.role,
+  );
 
   const res = NextResponse.json({
     accessToken,
@@ -133,6 +158,6 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
     },
   });
 
-  setAuthCookies(res, refreshToken);
+  res.cookies.set('refreshToken', refreshToken, getRefreshCookieOptions());
   return res;
 });
