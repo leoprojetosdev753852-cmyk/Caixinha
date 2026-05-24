@@ -24,8 +24,9 @@ export default function NovoUsuarioPage() {
     setErro(null);
 
     const cpfLimpo = limparCPF(cpf);
+    const nomeLimpo = nome.trim();
 
-    if (nome.trim().length < 3) {
+    if (nomeLimpo.length < 3) {
       setErro('Digite o nome completo');
       return;
     }
@@ -40,12 +41,27 @@ export default function NovoUsuarioPage() {
         usuario: { id: string; nomeCompleto: string };
       }>('/api/admin/usuarios', {
         method: 'POST',
-        body: { nomeCompleto: nome.trim(), cpf: cpfLimpo },
+        body: { nomeCompleto: nomeLimpo, cpf: cpfLimpo },
       });
+
+      if (!result?.usuario?.id) {
+        throw new Error('Resposta inválida da API');
+      }
+
       toast.success(`${result.usuario.nomeCompleto} cadastrado!`);
       router.push(`/usuarios/${result.usuario.id}`);
     } catch (err) {
-      setErro(err instanceof ApiError ? err.message : 'Erro inesperado');
+      let msg = 'Erro inesperado';
+      if (err instanceof ApiError) {
+        msg = err.message || msg;
+        if (err.code === 'DUPLICATE_CPF') {
+          msg = 'Já existe usuário com este CPF';
+        }
+      } else if (err instanceof Error) {
+        msg = err.message;
+      }
+      setErro(msg);
+      toast.error(msg);
     } finally {
       setLoading(false);
     }
