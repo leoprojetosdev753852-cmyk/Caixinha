@@ -1,5 +1,4 @@
 // Schema do banco — Caixinha
-// Inclui Fases 1 (usuarios) + 2 (caixinhas com pontos compartilhados) + 3 (emprestimos)
 
 generator client {
   provider = "prisma-client-js"
@@ -11,9 +10,7 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
-// ============================================
 // ENUMS
-// ============================================
 
 enum Role {
   ADMIN
@@ -58,9 +55,7 @@ enum StatusParcelaEmprestimo {
   ATRASADO
 }
 
-// ============================================
-// USUARIOS & AUTH
-// ============================================
+// USUARIOS
 
 model Usuario {
   id             String  @id @default(cuid())
@@ -104,16 +99,15 @@ model RefreshToken {
   @@map("refresh_tokens")
 }
 
-// ============================================
-// CAIXINHAS (consorcio com pontos compartilhados)
-// ============================================
+// CAIXINHAS
 
 model Caixinha {
-  id           String         @id @default(cuid())
-  nome         String
-  observacao   String?
-  status       StatusCaixinha @default(RASCUNHO)
-  dataAtivacao DateTime?
+  id            String         @id @default(cuid())
+  nome          String
+  observacao    String?
+  status        StatusCaixinha @default(RASCUNHO)
+  dataAtivacao  DateTime?
+  diaPagamento  Int            // dia do mes do pagamento (1-31)
 
   criadoEm     DateTime @default(now())
   atualizadoEm DateTime @updatedAt
@@ -137,8 +131,6 @@ model PontoCaixinha {
   @@map("pontos_caixinha")
 }
 
-// Cota = usuario participando de um ponto (1 ou N por ponto)
-// Soma de cotas.valor deve ser igual a ponto.valor
 model CotaPonto {
   id        String        @id @default(cuid())
   pontoId   String
@@ -157,8 +149,6 @@ model CotaPonto {
   @@map("cotas_ponto")
 }
 
-// Pagamento mensal de uma cota
-// Gerado quando admin ativa a caixinha (1 pagamento por cota x mes)
 model PagamentoCota {
   id     String    @id @default(cuid())
   cotaId String
@@ -179,9 +169,7 @@ model PagamentoCota {
   @@map("pagamentos_cota")
 }
 
-// ============================================
-// EMPRESTIMOS (a vista ou parcelados)
-// ============================================
+// EMPRESTIMOS
 
 model Emprestimo {
   id                    String           @id @default(cuid())
@@ -210,8 +198,6 @@ model Emprestimo {
   @@map("emprestimos")
 }
 
-// Parcelas de emprestimo PARCELADO
-// Admin define data de vencimento e valor de cada parcela manualmente
 model ParcelaEmprestimo {
   id           String     @id @default(cuid())
   emprestimoId String
@@ -233,9 +219,7 @@ model ParcelaEmprestimo {
   @@map("parcelas_emprestimo")
 }
 
-// ============================================
 // AUDITORIA
-// ============================================
 
 model Auditoria {
   id        String   @id @default(cuid())

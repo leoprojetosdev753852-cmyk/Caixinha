@@ -3,15 +3,9 @@ import { z } from 'zod';
 export const criarCaixinhaSchema = z.object({
   nome: z.string().min(3, 'Nome muito curto').max(120),
   observacao: z.string().max(500).optional(),
-  pontos: z
-    .array(
-      z.object({
-        numero: z.number().int().min(1),
-        valor: z.number().int().min(1, 'Valor deve ser maior que zero'),
-        dataContemplacao: z.string().optional(),
-      }),
-    )
-    .min(1, 'Crie pelo menos um ponto'),
+  diaPagamento: z.number().int().min(1).max(31),
+  quantidadePontos: z.number().int().min(1).max(60),
+  valorTotal: z.number().int().min(1),
 });
 
 export const atualizarPontoSchema = z.object({
@@ -30,12 +24,9 @@ export const atualizarCotaSchema = z.object({
 
 export const ativarCaixinhaSchema = z.object({
   parcelas: z
-    .array(
-      z.object({
-        dataVencimento: z.string(), // YYYY-MM-DD
-      }),
-    )
-    .min(1, 'Crie pelo menos uma parcela'),
+    .array(z.object({ dataVencimento: z.string() }))
+    .min(1, 'Crie pelo menos uma parcela')
+    .optional(),
 });
 
 export const baixarPagamentoSchema = z.object({

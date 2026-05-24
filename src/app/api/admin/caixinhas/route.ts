@@ -31,7 +31,6 @@ export const GET = withErrorHandling(async (req: NextRequest) => {
     },
   });
 
-  // Calcula stats por caixinha
   const result = caixinhas.map((c) => {
     let valorTotal = 0;
     let pontosOcupados = 0;
@@ -58,6 +57,7 @@ export const GET = withErrorHandling(async (req: NextRequest) => {
       nome: c.nome,
       status: c.status,
       observacao: c.observacao,
+      diaPagamento: c.diaPagamento,
       dataAtivacao: c.dataAtivacao,
       criadoEm: c.criadoEm,
       valorTotal,
@@ -78,24 +78,26 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
   const body = await req.json();
   const data = criarCaixinhaSchema.parse(body);
 
-  // Valida números únicos
-  const numeros = data.pontos.map((p) => p.numero);
-  if (new Set(numeros).size !== numeros.length) {
-    return errorResponse('Números de pontos duplicados', 400, 'INVALID_INPUT');
+  // Calcula valor por ponto (rateio igual default)
+  const valorPorPonto = Math.floor(data.valorTotal / data.quantidadePontos);
+  if (valorPorPonto <= 0) {
+    return errorResponse('Valor por ponto resultou em zero', 400, 'INVALID_INPUT');
   }
+
+  // Cria caixinha + N pontos numerados de 1 a N, todos com mesmo valor
+  const pontosArray = Array.from({ length: data.quantidadePontos }, (_, i) => ({
+    numero: i + 1,
+    valor: valorPorPonto,
+    dataContemplacao: null,
+  }));
 
   const caixinha = await prisma.caixinha.create({
     data: {
       nome: data.nome,
       observacao: data.observacao,
+      diaPagamento: data.diaPagamento,
       status: 'RASCUNHO',
-      pontos: {
-        create: data.pontos.map((p) => ({
-          numero: p.numero,
-          valor: p.valor,
-          dataContemplacao: p.dataContemplacao ? new Date(p.dataContemplacao) : null,
-        })),
-      },
+      pontos: { create: pontosArray },
     },
     include: { pontos: true },
   });
@@ -104,7 +106,7 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
     categoria: AUDIT.CAIXINHA_CRIADA,
     acao: `Criou caixinha "${caixinha.nome}" com ${caixinha.pontos.length} pontos`,
     usuarioId: admin.sub,
-    metadata: { caixinhaId: caixinha.id },
+    metadata: { caixinhaId: caixinha.id, valorTotal: data.valorTotal },
   });
 
   return NextResponse.json({ caixinha }, { status: 201 });
