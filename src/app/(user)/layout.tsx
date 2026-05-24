@@ -4,8 +4,8 @@ import { Toaster } from '@/components/ui/toast';
 
 const navItems = [
   { href: '/home', label: 'Início', icon: 'home' as const },
-  { href: '/caixinhas', label: 'Caixinhas', icon: 'piggy' as const },
-  { href: '/emprestimos', label: 'Empréstimos', icon: 'hand' as const },
+  { href: '/minhas-caixinhas', label: 'Caixinhas', icon: 'piggy' as const },
+  { href: '/meus-emprestimos', label: 'Empréstimos', icon: 'hand' as const },
   { href: '/perfil', label: 'Perfil', icon: 'user' as const },
 ];
 
