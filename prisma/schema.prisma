@@ -1,5 +1,5 @@
-// Schema do banco — Caixinha
-// Inclui Fases 1 (usuários) + 2 (caixinhas com pontos compartilhados) + 3 (empréstimos)
+﻿// Schema do banco — Caixinha
+// Inclui Fases 1 (usuarios) + 2 (caixinhas com pontos compartilhados) + 3 (emprestimos)
 
 generator client {
   provider = "prisma-client-js"
@@ -28,10 +28,10 @@ enum TipoChavePix {
 }
 
 enum StatusCaixinha {
-  RASCUNHO   // criada, admin configurando
-  ATIVA      // ativada, pagamentos rolando
-  CONCLUIDA  // todos pagamentos quitados
-  CANCELADA  // encerrada manualmente
+  RASCUNHO
+  ATIVA
+  CONCLUIDA
+  CANCELADA
 }
 
 enum StatusPagamentoCaixinha {
@@ -41,8 +41,8 @@ enum StatusPagamentoCaixinha {
 }
 
 enum TipoEmprestimo {
-  A_VISTA     // parcela única (valor + juros, vence numa data)
-  PARCELADO   // N parcelas mensais
+  A_VISTA
+  PARCELADO
 }
 
 enum StatusEmprestimo {
@@ -59,7 +59,7 @@ enum StatusParcelaEmprestimo {
 }
 
 // ============================================
-// USUÁRIOS & AUTH
+// USUARIOS & AUTH
 // ============================================
 
 model Usuario {
@@ -105,15 +105,15 @@ model RefreshToken {
 }
 
 // ============================================
-// CAIXINHAS (consórcio com pontos compartilhados)
+// CAIXINHAS (consorcio com pontos compartilhados)
 // ============================================
 
 model Caixinha {
-  id               String         @id @default(cuid())
-  nome             String
-  observacao       String?
-  status           StatusCaixinha @default(RASCUNHO)
-  dataAtivacao     DateTime?
+  id           String         @id @default(cuid())
+  nome         String
+  observacao   String?
+  status       StatusCaixinha @default(RASCUNHO)
+  dataAtivacao DateTime?
 
   criadoEm     DateTime @default(now())
   atualizadoEm DateTime @updatedAt
@@ -124,12 +124,12 @@ model Caixinha {
 }
 
 model PontoCaixinha {
-  id              String    @id @default(cuid())
-  caixinhaId      String
-  caixinha        Caixinha  @relation(fields: [caixinhaId], references: [id], onDelete: Cascade)
-  numero          Int       // 1, 2, 3...
-  valor           Int       // valor TOTAL do ponto em centavos (admin define)
-  dataContemplacao DateTime? // quando esse ponto "recebe o bolão" (admin define)
+  id               String    @id @default(cuid())
+  caixinhaId       String
+  caixinha         Caixinha  @relation(fields: [caixinhaId], references: [id], onDelete: Cascade)
+  numero           Int
+  valor            Int
+  dataContemplacao DateTime?
 
   cotas CotaPonto[]
 
@@ -137,11 +137,8 @@ model PontoCaixinha {
   @@map("pontos_caixinha")
 }
 
-/**
- * Cota representa um usuário participando de um ponto.
- * Um ponto pode ter 1 ou N cotas (compartilhado).
- * Soma de cotas.valor deve = ponto.valor
- */
+// Cota = usuario participando de um ponto (1 ou N por ponto)
+// Soma de cotas.valor deve ser igual a ponto.valor
 model CotaPonto {
   id        String        @id @default(cuid())
   pontoId   String
@@ -149,7 +146,7 @@ model CotaPonto {
   usuarioId String
   usuario   Usuario       @relation(fields: [usuarioId], references: [id])
 
-  valor Int  // valor da cota em centavos (admin define manualmente)
+  valor Int
 
   criadoEm DateTime @default(now())
 
@@ -160,10 +157,8 @@ model CotaPonto {
   @@map("cotas_ponto")
 }
 
-/**
- * Pagamento mensal de uma cota.
- * Quando admin ativa a caixinha, gera 1 pagamento por (cota × mês de duração).
- */
+// Pagamento mensal de uma cota
+// Gerado quando admin ativa a caixinha (1 pagamento por cota x mes)
 model PagamentoCota {
   id     String    @id @default(cuid())
   cotaId String
@@ -185,7 +180,7 @@ model PagamentoCota {
 }
 
 // ============================================
-// EMPRÉSTIMOS (à vista ou parcelados)
+// EMPRESTIMOS (a vista ou parcelados)
 // ============================================
 
 model Emprestimo {
@@ -193,12 +188,11 @@ model Emprestimo {
   usuarioId             String
   usuario               Usuario          @relation(fields: [usuarioId], references: [id])
   tipo                  TipoEmprestimo
-  valorOriginal         Int              // valor emprestado em centavos
+  valorOriginal         Int
   percentualJuros       Decimal          @db.Decimal(5, 2)
   percentualJurosAtraso Decimal          @db.Decimal(5, 2)
   observacao            String?
 
-  // Para A_VISTA
   dataVencimento DateTime?
   valorPago      Int       @default(0)
   dataPagamento  DateTime?
@@ -216,10 +210,8 @@ model Emprestimo {
   @@map("emprestimos")
 }
 
-/**
- * Parcelas de empréstimo PARCELADO.
- * Admin define data de vencimento e valor de cada parcela manualmente.
- */
+// Parcelas de emprestimo PARCELADO
+// Admin define data de vencimento e valor de cada parcela manualmente
 model ParcelaEmprestimo {
   id           String     @id @default(cuid())
   emprestimoId String
