@@ -12,12 +12,13 @@ import { formatDate } from '@/lib/date';
 
 interface EmprestimoItem {
   id: string;
+  nomeDevedor: string;
+  pixDevedor: string | null;
   tipo: 'A_VISTA' | 'PARCELADO';
   valorOriginal: number;
   status: 'ATIVO' | 'QUITADO' | 'ATRASADO' | 'CANCELADO';
   dataVencimento: string | null;
   criadoEm: string;
-  usuario: { id: string; nomeCompleto: string };
   parcelas: Array<{ id: string; status: string; valorDevido: number }>;
 }
 
@@ -119,7 +120,7 @@ export default function EmprestimosListaPage() {
                   >
                     <div className="flex items-start justify-between gap-2 pr-8">
                       <div className="min-w-0 flex-1">
-                        <h3 className="truncate font-semibold">{e.usuario.nomeCompleto}</h3>
+                        <h3 className="truncate font-semibold">{e.nomeDevedor}</h3>
                         <p className="text-sm text-muted-foreground">
                           {formatarBRL(e.valorOriginal)} ·{' '}
                           {e.tipo === 'A_VISTA' ? 'À vista' : `${e.parcelas.length}x parcelado`}

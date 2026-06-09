@@ -9,63 +9,15 @@ export const GET = withErrorHandling(async (req: NextRequest) => {
 
   const hoje = new Date();
 
-  // CAIXINHAS
-  const caixinhasAtivas = await prisma.caixinha.findMany({
-    where: { status: 'ATIVA' },
-    include: {
-      pontos: {
-        include: {
-          cotas: { include: { pagamentos: true } },
-        },
-      },
-    },
-  });
-
-  let totalCaixinhasAtivas = caixinhasAtivas.length;
-  let pontosEmAberto = 0;
-  let pagamentosPendentes = 0;
-  let valorPendenteCaixinhas = 0;
-
-  const drilldownPontosVagos: Array<{
-    caixinhaId: string;
-    caixinhaNome: string;
-    pontoNumero: number;
-    valorVago: number;
-  }> = [];
-
-  for (const c of caixinhasAtivas) {
-    for (const p of c.pontos) {
-      const somaCotas = p.cotas.reduce((acc, ct) => acc + ct.valor, 0);
-      const vago = p.valor - somaCotas;
-      if (vago > 0) {
-        pontosEmAberto++;
-        drilldownPontosVagos.push({
-          caixinhaId: c.id,
-          caixinhaNome: c.nome,
-          pontoNumero: p.numero,
-          valorVago: vago,
-        });
-      }
-      for (const cota of p.cotas) {
-        for (const pag of cota.pagamentos) {
-          if (pag.status !== 'PAGO') {
-            pagamentosPendentes++;
-            valorPendenteCaixinhas += pag.valorDevido;
-          }
-        }
-      }
-    }
-  }
-
-  // EMPRÉSTIMOS
   const emprestimos = await prisma.emprestimo.findMany({
     where: { status: { in: ['ATIVO', 'ATRASADO'] } },
     include: { parcelas: true },
   });
 
-  let totalEmprestimosAtivos = emprestimos.length;
+  let totalAtivos = emprestimos.length;
   let valorEmprestado = 0;
   let valorAReceber = 0;
+  let totalAtrasados = 0;
 
   for (const e of emprestimos) {
     valorEmprestado += e.valorOriginal;
@@ -79,7 +31,9 @@ export const GET = withErrorHandling(async (req: NextRequest) => {
         dataReferencia: hoje,
       });
       valorAReceber += calc.valorTotal;
+      if (calc.diasAtraso > 0) totalAtrasados++;
     } else if (e.tipo === 'PARCELADO') {
+      let temAtraso = false;
       for (const parc of e.parcelas) {
         if (parc.status !== 'PAGO') {
           const calc = calcularParcela({
@@ -89,21 +43,17 @@ export const GET = withErrorHandling(async (req: NextRequest) => {
             dataReferencia: hoje,
           });
           valorAReceber += calc.valorTotal;
+          if (calc.diasAtraso > 0) temAtraso = true;
         }
       }
+      if (temAtraso) totalAtrasados++;
     }
   }
 
   return NextResponse.json({
-    caixinhas: {
-      ativas: totalCaixinhasAtivas,
-      pontosEmAberto,
-      pagamentosPendentes,
-      valorPendente: valorPendenteCaixinhas,
-      drilldownPontosVagos,
-    },
     emprestimos: {
-      ativos: totalEmprestimosAtivos,
+      ativos: totalAtivos,
+      atrasados: totalAtrasados,
       valorEmprestado,
       valorAReceber,
     },

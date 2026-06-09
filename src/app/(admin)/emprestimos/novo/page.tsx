@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Loader2, HandCoins, Plus, Trash2 } from 'lucide-react';
 import { apiFetch, ApiError } from '@/lib/api-client';
@@ -8,14 +8,7 @@ import { useToast } from '@/components/ui/toast';
 import { Header } from '@/components/layouts/header';
 import { Input, Label } from '@/components/ui/input';
 import { MoneyInput } from '@/components/ui/money-input';
-import { formatarCPF } from '@/shared';
 import { toInputDate } from '@/lib/date';
-
-interface Usuario {
-  id: string;
-  nomeCompleto: string;
-  cpf: string;
-}
 
 interface ParcelaForm {
   numero: number;
@@ -28,25 +21,19 @@ export default function NovoEmprestimoPage() {
   const router = useRouter();
   const toast = useToast();
 
-  const [usuarios, setUsuarios] = useState<Usuario[]>([]);
-  const [usuarioId, setUsuarioId] = useState('');
+  const [nomeDevedor, setNomeDevedor] = useState('');
+  const [pixDevedor, setPixDevedor] = useState('');
+  const [observacao, setObservacao] = useState('');
   const [tipo, setTipo] = useState<'A_VISTA' | 'PARCELADO'>('A_VISTA');
   const [valorOriginalStr, setValorOriginalStr] = useState('');
   const [valorOriginal, setValorOriginal] = useState(0);
   const [percentualJuros, setPercentualJuros] = useState('10');
   const [percentualJurosAtraso, setPercentualJurosAtraso] = useState('0.5');
-  const [observacao, setObservacao] = useState('');
   const [dataVencimento, setDataVencimento] = useState(toInputDate(new Date()));
   const [parcelas, setParcelas] = useState<ParcelaForm[]>([
     { numero: 1, valor: 0, valorStr: '', dataVencimento: toInputDate(new Date()) },
   ]);
   const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    apiFetch<{ usuarios: Usuario[] }>('/api/admin/usuarios?apenas=ativos')
-      .then((d) => setUsuarios(d.usuarios))
-      .catch(() => {});
-  }, []);
 
   const adicionarParcela = () => {
     const prox = parcelas.length > 0 ? Math.max(...parcelas.map((p) => p.numero)) + 1 : 1;
@@ -64,8 +51,8 @@ export default function NovoEmprestimoPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!usuarioId) {
-      toast.error('Selecione um usuário');
+    if (nomeDevedor.trim().length < 2) {
+      toast.error('Informe o nome do devedor');
       return;
     }
     if (valorOriginal <= 0) {
@@ -80,12 +67,13 @@ export default function NovoEmprestimoPage() {
     setLoading(true);
     try {
       const body: any = {
-        usuarioId,
+        nomeDevedor: nomeDevedor.trim(),
+        pixDevedor: pixDevedor.trim() || undefined,
+        observacao: observacao.trim() || undefined,
         tipo,
         valorOriginal,
         percentualJuros: Number(percentualJuros),
         percentualJurosAtraso: Number(percentualJurosAtraso),
-        observacao: observacao.trim() || undefined,
       };
       if (tipo === 'A_VISTA') {
         body.dataVencimento = dataVencimento;
@@ -122,19 +110,25 @@ export default function NovoEmprestimoPage() {
         </div>
 
         <div className="space-y-2">
-          <Label>Usuário</Label>
-          <select
-            value={usuarioId}
-            onChange={(e) => setUsuarioId(e.target.value)}
-            className="flex h-12 w-full rounded-md border border-input bg-background px-3 text-base focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
-            <option value="">Selecione</option>
-            {usuarios.map((u) => (
-              <option key={u.id} value={u.id}>
-                {u.nomeCompleto} · {formatarCPF(u.cpf)}
-              </option>
-            ))}
-          </select>
+          <Label htmlFor="nome">Nome do devedor</Label>
+          <Input
+            id="nome"
+            value={nomeDevedor}
+            onChange={(e) => setNomeDevedor(e.target.value)}
+            placeholder="Ex: João Silva"
+            autoComplete="off"
+            autoFocus
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label htmlFor="pix">PIX do devedor (opcional)</Label>
+          <Input
+            id="pix"
+            value={pixDevedor}
+            onChange={(e) => setPixDevedor(e.target.value)}
+            placeholder="CPF, e-mail, telefone ou chave aleatória"
+          />
         </div>
 
         <div className="space-y-2">
@@ -143,14 +137,22 @@ export default function NovoEmprestimoPage() {
             <button
               type="button"
               onClick={() => setTipo('A_VISTA')}
-              className={`flex h-12 items-center justify-center rounded-md border-2 font-medium ${tipo === 'A_VISTA' ? 'border-primary bg-primary/5 text-primary' : 'border-input'}`}
+              className={`flex h-12 items-center justify-center rounded-md border-2 font-medium ${
+                tipo === 'A_VISTA'
+                  ? 'border-primary bg-primary/5 text-primary'
+                  : 'border-input'
+              }`}
             >
               À vista
             </button>
             <button
               type="button"
               onClick={() => setTipo('PARCELADO')}
-              className={`flex h-12 items-center justify-center rounded-md border-2 font-medium ${tipo === 'PARCELADO' ? 'border-primary bg-primary/5 text-primary' : 'border-input'}`}
+              className={`flex h-12 items-center justify-center rounded-md border-2 font-medium ${
+                tipo === 'PARCELADO'
+                  ? 'border-primary bg-primary/5 text-primary'
+                  : 'border-input'
+              }`}
             >
               Parcelado
             </button>
@@ -254,8 +256,13 @@ export default function NovoEmprestimoPage() {
         )}
 
         <div className="space-y-2">
-          <Label>Observação (opcional)</Label>
-          <Input value={observacao} onChange={(e) => setObservacao(e.target.value)} />
+          <Label htmlFor="obs">Observação (opcional)</Label>
+          <Input
+            id="obs"
+            value={observacao}
+            onChange={(e) => setObservacao(e.target.value)}
+            placeholder="Ex: pra pagar dia 10"
+          />
         </div>
 
         <button

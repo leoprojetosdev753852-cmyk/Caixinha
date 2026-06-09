@@ -2,50 +2,42 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import {
-  Users,
-  PiggyBank,
-  HandCoins,
-  Loader2,
-  TrendingUp,
-  AlertCircle,
-} from 'lucide-react';
-import { apiFetch } from '@/lib/api-client';
+import { Loader2, HandCoins, AlertCircle, TrendingUp, Wallet } from 'lucide-react';
+import { apiFetch, ApiError } from '@/lib/api-client';
+import { useToast } from '@/components/ui/toast';
+import { useAuthStore } from '@/stores/auth-store';
 import { Header, LogoutButton } from '@/components/layouts/header';
 import { formatarBRL } from '@/shared';
 
-interface DashData {
-  caixinhas: {
-    ativas: number;
-    pontosEmAberto: number;
-    pagamentosPendentes: number;
-    valorPendente: number;
-    drilldownPontosVagos: Array<{
-      caixinhaId: string;
-      caixinhaNome: string;
-      pontoNumero: number;
-      valorVago: number;
-    }>;
-  };
+interface DashboardData {
   emprestimos: {
     ativos: number;
+    atrasados: number;
     valorEmprestado: number;
     valorAReceber: number;
   };
 }
 
-interface Me {
-  nomeCompleto?: string;
-}
-
 export default function DashboardPage() {
-  const [me, setMe] = useState<Me | null>(null);
-  const [data, setData] = useState<DashData | null>(null);
-  const [drilldownOpen, setDrilldownOpen] = useState(false);
+  const toast = useToast();
+  const user = useAuthStore((s) => s.user);
+
+  const [data, setData] = useState<DashboardData | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    apiFetch<Me>('/api/users/me').then(setMe).catch(() => {});
-    apiFetch<DashData>('/api/admin/dashboard').then(setData).catch(() => {});
+    const carregar = async () => {
+      try {
+        const d = await apiFetch<DashboardData>('/api/admin/dashboard');
+        setData(d);
+      } catch (err) {
+        toast.error(err instanceof ApiError ? err.message : 'Erro');
+      } finally {
+        setLoading(false);
+      }
+    };
+    carregar();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
@@ -53,121 +45,93 @@ export default function DashboardPage() {
       <Header title="Dashboard" rightSlot={<LogoutButton />} />
 
       <div className="space-y-6 px-4 py-4">
-        <header className="space-y-1">
+        <div>
           <p className="text-sm text-muted-foreground">Olá,</p>
-          <h1 className="text-2xl font-bold">{me?.nomeCompleto?.split(' ')[0] ?? 'Admin'}</h1>
-        </header>
+          <h1 className="text-2xl font-bold">{user?.nomeCompleto || 'Administrador'}</h1>
+        </div>
 
-        {!data && (
-          <div className="flex justify-center py-8">
-            <Loader2 className="h-6 w-6 animate-spin text-primary" />
+        {loading && (
+          <div className="flex justify-center py-12">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
           </div>
         )}
 
-        {data && (
+        {!loading && data && (
           <>
-            <div className="space-y-2">
-              <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Caixinhas
-              </h2>
-              <div className="grid grid-cols-2 gap-3">
-                <Link href="/caixinhas" className="rounded-lg border border-border bg-card p-4 hover:bg-accent">
-                  <p className="text-xs text-muted-foreground">Ativas</p>
-                  <p className="mt-1 text-2xl font-bold">{data.caixinhas.ativas}</p>
-                </Link>
-                <button
-                  onClick={() => setDrilldownOpen(!drilldownOpen)}
-                  className="rounded-lg border border-border bg-card p-4 text-left hover:bg-accent"
-                >
-                  <p className="text-xs text-muted-foreground">Pontos vagos</p>
-                  <p className="mt-1 text-2xl font-bold">{data.caixinhas.pontosEmAberto}</p>
-                </button>
-                <div className="col-span-2 rounded-lg border border-border bg-card p-4">
-                  <p className="text-xs text-muted-foreground">A receber este ciclo</p>
-                  <p className="mt-1 text-xl font-bold">{formatarBRL(data.caixinhas.valorPendente)}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {data.caixinhas.pagamentosPendentes} pagamento{data.caixinhas.pagamentosPendentes !== 1 ? 's' : ''} pendente{data.caixinhas.pagamentosPendentes !== 1 ? 's' : ''}
-                  </p>
-                </div>
-              </div>
-
-              {drilldownOpen && data.caixinhas.drilldownPontosVagos.length > 0 && (
-                <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 space-y-2">
-                  <p className="text-xs font-semibold text-amber-900">
-                    Pontos pendentes de alocação:
-                  </p>
-                  {data.caixinhas.drilldownPontosVagos.map((d, idx) => (
-                    <Link
-                      key={idx}
-                      href={`/caixinhas/${d.caixinhaId}`}
-                      className="block rounded border border-amber-300 bg-white p-2 text-sm hover:bg-amber-100"
-                    >
-                      <span className="font-medium">{d.caixinhaNome}</span>{' '}
-                      <span className="text-muted-foreground">— Ponto {d.pontoNumero}</span>{' '}
-                      <span className="text-xs text-amber-700">
-                        (falta {formatarBRL(d.valorVago)})
-                      </span>
-                    </Link>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            <div className="space-y-2">
-              <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            <section className="space-y-3">
+              <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                 Empréstimos
               </h2>
               <div className="grid grid-cols-2 gap-3">
-                <Link href="/emprestimos" className="rounded-lg border border-border bg-card p-4 hover:bg-accent">
-                  <p className="text-xs text-muted-foreground">Ativos</p>
-                  <p className="mt-1 text-2xl font-bold">{data.emprestimos.ativos}</p>
-                </Link>
                 <div className="rounded-lg border border-border bg-card p-4">
-                  <p className="text-xs text-muted-foreground">Emprestado</p>
-                  <p className="mt-1 text-xl font-bold">{formatarBRL(data.emprestimos.valorEmprestado)}</p>
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <HandCoins className="h-4 w-4" />
+                    <p className="text-xs">Ativos</p>
+                  </div>
+                  <p className="mt-1 text-2xl font-bold">{data.emprestimos.ativos}</p>
                 </div>
-                <div className="col-span-2 rounded-lg border border-emerald-200 bg-emerald-50 p-4">
-                  <p className="text-xs text-emerald-900">A receber (com juros)</p>
-                  <p className="mt-1 text-xl font-bold text-emerald-900">
+                <div className="rounded-lg border border-border bg-card p-4">
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <AlertCircle className="h-4 w-4" />
+                    <p className="text-xs">Em atraso</p>
+                  </div>
+                  <p
+                    className={`mt-1 text-2xl font-bold ${
+                      data.emprestimos.atrasados > 0 ? 'text-destructive' : ''
+                    }`}
+                  >
+                    {data.emprestimos.atrasados}
+                  </p>
+                </div>
+                <div className="rounded-lg border border-border bg-card p-4">
+                  <div className="flex items-center gap-2 text-muted-foreground">
+                    <Wallet className="h-4 w-4" />
+                    <p className="text-xs">Emprestado</p>
+                  </div>
+                  <p className="mt-1 text-lg font-bold">
+                    {formatarBRL(data.emprestimos.valorEmprestado)}
+                  </p>
+                </div>
+                <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-4">
+                  <div className="flex items-center gap-2 text-emerald-900">
+                    <TrendingUp className="h-4 w-4" />
+                    <p className="text-xs">A receber (c/ juros)</p>
+                  </div>
+                  <p className="mt-1 text-lg font-bold text-emerald-900">
                     {formatarBRL(data.emprestimos.valorAReceber)}
                   </p>
                 </div>
               </div>
-            </div>
+            </section>
+
+            <section className="space-y-3">
+              <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+                Atalhos
+              </h2>
+              <div className="grid grid-cols-2 gap-3">
+                <Link
+                  href="/emprestimos/novo"
+                  className="flex flex-col items-center gap-2 rounded-lg border border-border bg-card p-4 hover:bg-accent"
+                >
+                  <div className="rounded-full bg-primary/10 p-2 text-primary">
+                    <HandCoins className="h-5 w-5" />
+                  </div>
+                  <p className="text-sm font-medium">Novo empréstimo</p>
+                </Link>
+                <Link
+                  href="/emprestimos"
+                  className="flex flex-col items-center gap-2 rounded-lg border border-border bg-card p-4 hover:bg-accent"
+                >
+                  <div className="rounded-full bg-primary/10 p-2 text-primary">
+                    <Wallet className="h-5 w-5" />
+                  </div>
+                  <p className="text-sm font-medium">Ver todos</p>
+                </Link>
+              </div>
+            </section>
           </>
         )}
-
-        <div className="space-y-2">
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            Atalhos
-          </h2>
-          <div className="grid grid-cols-3 gap-2">
-            <AtalhoCard href="/usuarios" icon={Users} label="Usuários" />
-            <AtalhoCard href="/caixinhas" icon={PiggyBank} label="Caixinhas" />
-            <AtalhoCard href="/emprestimos" icon={HandCoins} label="Empréstimos" />
-          </div>
-        </div>
       </div>
     </>
-  );
-}
-
-function AtalhoCard({
-  href,
-  icon: Icon,
-  label,
-}: {
-  href: string;
-  icon: React.ComponentType<{ className?: string }>;
-  label: string;
-}) {
-  return (
-    <Link
-      href={href as any}
-      className="flex flex-col items-center gap-2 rounded-lg border border-border bg-card p-3 transition hover:bg-accent"
-    >
-      <Icon className="h-5 w-5 text-primary" />
-      <span className="text-xs font-medium">{label}</span>
-    </Link>
   );
 }

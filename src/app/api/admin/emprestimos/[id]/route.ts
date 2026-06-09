@@ -14,15 +14,6 @@ export const GET = withErrorHandling(async (req: NextRequest, { params }: Ctx) =
   const emp = await prisma.emprestimo.findUnique({
     where: { id: params.id },
     include: {
-      usuario: {
-        select: {
-          id: true,
-          nomeCompleto: true,
-          cpf: true,
-          chavePix: true,
-          tipoChavePix: true,
-        },
-      },
       parcelas: { orderBy: { numero: 'asc' } },
     },
   });
@@ -34,19 +25,15 @@ export const GET = withErrorHandling(async (req: NextRequest, { params }: Ctx) =
 export const DELETE = withErrorHandling(async (req: NextRequest, { params }: Ctx) => {
   const admin = await requireAdmin(req.headers.get('authorization'));
 
-  const emp = await prisma.emprestimo.findUnique({
-    where: { id: params.id },
-    include: { usuario: { select: { nomeCompleto: true } } },
-  });
+  const emp = await prisma.emprestimo.findUnique({ where: { id: params.id } });
   if (!emp) return errorResponse('Empréstimo não encontrado', 404, 'NOT_FOUND');
 
   if (emp.status === 'ATIVO') {
-    // Delete real (cascateia parcelas)
     await prisma.emprestimo.delete({ where: { id: params.id } });
 
     await registrarAuditoria({
       categoria: AUDIT.EMPRESTIMO_CRIADO,
-      acao: `Excluiu empréstimo de ${emp.usuario.nomeCompleto}`,
+      acao: `Excluiu empréstimo de ${emp.nomeDevedor}`,
       usuarioId: admin.sub,
       metadata: { emprestimoId: emp.id, acao: 'delete' },
     });
@@ -54,7 +41,6 @@ export const DELETE = withErrorHandling(async (req: NextRequest, { params }: Ctx
     return NextResponse.json({ ok: true, acao: 'deleted' });
   }
 
-  // QUITADO, ATRASADO, CANCELADO -> só cancela
   await prisma.emprestimo.update({
     where: { id: params.id },
     data: { status: 'CANCELADO' },
@@ -62,7 +48,7 @@ export const DELETE = withErrorHandling(async (req: NextRequest, { params }: Ctx
 
   await registrarAuditoria({
     categoria: AUDIT.EMPRESTIMO_CRIADO,
-    acao: `Cancelou empréstimo de ${emp.usuario.nomeCompleto}`,
+    acao: `Cancelou empréstimo de ${emp.nomeDevedor}`,
     usuarioId: admin.sub,
     metadata: { emprestimoId: emp.id, acao: 'cancel' },
   });

@@ -165,15 +165,24 @@ model PagamentoCota {
   @@map("pagamentos_cota")
 }
 
+// EMPRESTIMOS - agora com dados do devedor diretos no registro
+
 model Emprestimo {
   id                    String           @id @default(cuid())
-  usuarioId             String
-  usuario               Usuario          @relation(fields: [usuarioId], references: [id])
+
+  // Devedor (controle interno - admin digita)
+  nomeDevedor           String
+  pixDevedor            String?
+  observacao            String?
+
+  // Legacy: vinculo a Usuario opcional (pra dados antigos nao quebrarem)
+  usuarioId             String?
+  usuario               Usuario?         @relation(fields: [usuarioId], references: [id])
+
   tipo                  TipoEmprestimo
   valorOriginal         Int
   percentualJuros       Decimal          @db.Decimal(5, 2)
   percentualJurosAtraso Decimal          @db.Decimal(5, 2)
-  observacao            String?
 
   dataVencimento DateTime?
   valorPago      Int       @default(0)

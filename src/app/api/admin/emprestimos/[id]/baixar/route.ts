@@ -18,7 +18,6 @@ export const POST = withErrorHandling(async (req: NextRequest, { params }: Ctx) 
 
   const emp = await prisma.emprestimo.findUnique({
     where: { id: params.id },
-    include: { usuario: { select: { nomeCompleto: true } } },
   });
 
   if (!emp) return errorResponse('Empréstimo não encontrado', 404, 'NOT_FOUND');
@@ -53,7 +52,7 @@ export const POST = withErrorHandling(async (req: NextRequest, { params }: Ctx) 
 
   await registrarAuditoria({
     categoria: AUDIT.EMPRESTIMO_BAIXA,
-    acao: `Baixou empréstimo à vista de ${emp.usuario.nomeCompleto}`,
+    acao: `Baixou empréstimo à vista de ${emp.nomeDevedor}`,
     usuarioId: admin.sub,
     metadata: { emprestimoId: emp.id, valorTotal: calc.valorTotal, diasAtraso: calc.diasAtraso },
   });

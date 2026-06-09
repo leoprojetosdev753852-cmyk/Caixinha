@@ -9,12 +9,14 @@ const decimalString = z
 
 export const criarEmprestimoSchema = z
   .object({
-    usuarioId: z.string().min(1),
+    nomeDevedor: z.string().min(2, 'Nome muito curto').max(120),
+    pixDevedor: z.string().max(200).optional().or(z.literal('')),
+    observacao: z.string().max(500).optional().or(z.literal('')),
+
     tipo: z.enum(['A_VISTA', 'PARCELADO']),
     valorOriginal: z.number().int().min(1),
     percentualJuros: decimalString,
     percentualJurosAtraso: decimalString,
-    observacao: z.string().max(500).optional(),
 
     // Para A_VISTA
     dataVencimento: z.string().optional(),

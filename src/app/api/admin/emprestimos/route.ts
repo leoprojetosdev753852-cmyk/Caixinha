@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireAdmin } from '@/lib/auth';
 import { criarEmprestimoSchema } from '@/shared';
-import { withErrorHandling, errorResponse } from '@/lib/api-helpers';
+import { withErrorHandling } from '@/lib/api-helpers';
 import { registrarAuditoria, AUDIT } from '@/lib/audit';
 
 export const GET = withErrorHandling(async (req: NextRequest) => {
@@ -11,7 +11,6 @@ export const GET = withErrorHandling(async (req: NextRequest) => {
   const emprestimos = await prisma.emprestimo.findMany({
     orderBy: { criadoEm: 'desc' },
     include: {
-      usuario: { select: { id: true, nomeCompleto: true, cpf: true } },
       parcelas: { orderBy: { numero: 'asc' } },
     },
   });
@@ -25,19 +24,15 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
   const body = await req.json();
   const data = criarEmprestimoSchema.parse(body);
 
-  const usuario = await prisma.usuario.findUnique({ where: { id: data.usuarioId } });
-  if (!usuario || !usuario.ativo) {
-    return errorResponse('Usuário inválido', 400, 'INVALID_USER');
-  }
-
   const emprestimo = await prisma.emprestimo.create({
     data: {
-      usuarioId: data.usuarioId,
+      nomeDevedor: data.nomeDevedor.trim(),
+      pixDevedor: data.pixDevedor?.trim() || null,
+      observacao: data.observacao?.trim() || null,
       tipo: data.tipo,
       valorOriginal: data.valorOriginal,
       percentualJuros: data.percentualJuros,
       percentualJurosAtraso: data.percentualJurosAtraso,
-      observacao: data.observacao,
       dataVencimento: data.dataVencimento ? new Date(data.dataVencimento) : null,
       status: 'ATIVO',
       parcelas:
@@ -51,12 +46,12 @@ export const POST = withErrorHandling(async (req: NextRequest) => {
             }
           : undefined,
     },
-    include: { parcelas: true, usuario: { select: { nomeCompleto: true } } },
+    include: { parcelas: true },
   });
 
   await registrarAuditoria({
     categoria: AUDIT.EMPRESTIMO_CRIADO,
-    acao: `Criou empréstimo ${data.tipo} para ${emprestimo.usuario.nomeCompleto}`,
+    acao: `Criou empréstimo ${data.tipo} para ${emprestimo.nomeDevedor}`,
     usuarioId: admin.sub,
     metadata: { emprestimoId: emprestimo.id, tipo: data.tipo, valor: data.valorOriginal },
   });

@@ -1,14 +1,14 @@
 'use client';
 
-import { use, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Loader2, CheckCircle2, Circle, DollarSign } from 'lucide-react';
+import { Loader2, CheckCircle2, Circle, DollarSign, Copy, Check } from 'lucide-react';
 import { apiFetch, ApiError } from '@/lib/api-client';
 import { useToast } from '@/components/ui/toast';
 import { Header } from '@/components/layouts/header';
 import { Input, Label } from '@/components/ui/input';
 import { Modal } from '@/components/ui/modal';
-import { formatarBRL, formatarCPF } from '@/shared';
+import { formatarBRL } from '@/shared';
 import { formatDate, toInputDate } from '@/lib/date';
 
 interface Parcela {
@@ -24,33 +24,38 @@ interface Parcela {
 
 interface Emprestimo {
   id: string;
+  nomeDevedor: string;
+  pixDevedor: string | null;
+  observacao: string | null;
   tipo: 'A_VISTA' | 'PARCELADO';
   valorOriginal: number;
   percentualJuros: string;
   percentualJurosAtraso: string;
-  observacao: string | null;
   dataVencimento: string | null;
   valorPago: number;
   dataPagamento: string | null;
   diasAtraso: number;
   status: 'ATIVO' | 'QUITADO' | 'ATRASADO' | 'CANCELADO';
-  usuario: { id: string; nomeCompleto: string; cpf: string; chavePix: string | null; tipoChavePix: string | null };
   parcelas: Parcela[];
 }
 
-export default function EmprestimoDetalhePage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
-  const { id } = use(params);
+interface PageProps {
+  params: { id: string };
+}
+
+export default function EmprestimoDetalhePage({ params }: PageProps) {
+  const id = params.id;
   const router = useRouter();
   const toast = useToast();
 
   const [emp, setEmp] = useState<Emprestimo | null>(null);
   const [loading, setLoading] = useState(true);
+  const [copiado, setCopiado] = useState(false);
 
-  const [modalBaixa, setModalBaixa] = useState<{ tipo: 'AVISTA' | 'PARCELA'; parcelaId?: string } | null>(null);
+  const [modalBaixa, setModalBaixa] = useState<{
+    tipo: 'AVISTA' | 'PARCELA';
+    parcelaId?: string;
+  } | null>(null);
   const [dataPag, setDataPag] = useState(toInputDate(new Date()));
   const [obs, setObs] = useState('');
   const [baixando, setBaixando] = useState(false);
@@ -98,6 +103,18 @@ export default function EmprestimoDetalhePage({
     }
   };
 
+  const handleCopiarPix = async () => {
+    if (!emp?.pixDevedor) return;
+    try {
+      await navigator.clipboard.writeText(emp.pixDevedor);
+      setCopiado(true);
+      toast.success('PIX copiado!');
+      setTimeout(() => setCopiado(false), 2000);
+    } catch {
+      toast.error('Não foi possível copiar');
+    }
+  };
+
   if (loading) {
     return (
       <>
@@ -120,9 +137,29 @@ export default function EmprestimoDetalhePage({
         <div className="rounded-lg border border-border bg-card p-4 space-y-3">
           <div>
             <p className="text-xs text-muted-foreground">Devedor</p>
-            <p className="font-semibold">{emp.usuario.nomeCompleto}</p>
-            <p className="text-xs text-muted-foreground">{formatarCPF(emp.usuario.cpf)}</p>
+            <p className="font-semibold">{emp.nomeDevedor}</p>
           </div>
+
+          {emp.pixDevedor && (
+            <div>
+              <p className="text-xs text-muted-foreground">PIX</p>
+              <div className="flex items-center gap-2">
+                <p className="break-all text-sm font-mono flex-1">{emp.pixDevedor}</p>
+                <button
+                  onClick={handleCopiarPix}
+                  className="shrink-0 rounded-md p-1.5 hover:bg-accent"
+                  aria-label="Copiar PIX"
+                >
+                  {copiado ? (
+                    <Check className="h-4 w-4 text-emerald-600" />
+                  ) : (
+                    <Copy className="h-4 w-4 text-muted-foreground" />
+                  )}
+                </button>
+              </div>
+            </div>
+          )}
+
           <div className="grid grid-cols-2 gap-3 text-sm">
             <div>
               <p className="text-xs text-muted-foreground">Valor</p>
@@ -141,6 +178,7 @@ export default function EmprestimoDetalhePage({
               <p className="font-semibold">{emp.percentualJurosAtraso}%</p>
             </div>
           </div>
+
           {emp.observacao && (
             <div>
               <p className="text-xs text-muted-foreground">Observação</p>
@@ -157,9 +195,11 @@ export default function EmprestimoDetalhePage({
                 <p className="text-xs text-muted-foreground">Vencimento</p>
                 <p className="font-semibold">{formatDate(emp.dataVencimento)}</p>
               </div>
-              <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                quitado ? 'bg-blue-100 text-blue-900' : 'bg-emerald-100 text-emerald-900'
-              }`}>
+              <span
+                className={`rounded-full px-2 py-0.5 text-xs font-medium ${
+                  quitado ? 'bg-blue-100 text-blue-900' : 'bg-emerald-100 text-emerald-900'
+                }`}
+              >
                 {quitado ? 'Pago' : 'A pagar'}
               </span>
             </div>
