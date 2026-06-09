@@ -1,82 +1,88 @@
-import { aplicarPercentual } from '@/shared';
-import { diffDays } from './date';
+// Helpers de calculo de emprestimos
 
-interface CalculoEmprestimoAVista {
+interface CalcAVistaInput {
   valorOriginal: number; // centavos
-  percentualJuros: number; // ex: 10
-  percentualJurosAtraso: number; // ex: 0.5 (por dia)
+  percentualJuros: number; // % normal
+  percentualJurosAtraso: number; // % por dia
   dataVencimento: Date;
-  dataReferencia: Date; // hoje, ou data do pagamento
+  dataReferencia: Date;
 }
 
-interface ResultadoCalculo {
-  valorBase: number; // original + juros normal
-  jurosNormal: number;
-  jurosAtraso: number;
+export function calcularEmprestimoAVista(input: CalcAVistaInput): {
+  valorTotal: number;
+  valorJuros: number;
+  valorJurosAtraso: number;
   diasAtraso: number;
-  valorTotal: number; // valor a receber
-}
+} {
+  const { valorOriginal, percentualJuros, percentualJurosAtraso } = input;
 
-/**
- * Calcula valor a receber de um empréstimo à vista.
- * Se dataReferencia <= dataVencimento → juros atraso = 0
- * Se dataReferencia > dataVencimento → juros atraso = base * (% atraso/dia) * dias
- */
-export function calcularEmprestimoAVista(params: CalculoEmprestimoAVista): ResultadoCalculo {
-  const { valorOriginal, percentualJuros, percentualJurosAtraso, dataVencimento, dataReferencia } =
-    params;
+  const jurosBase = Math.round((valorOriginal * percentualJuros) / 100);
 
-  const jurosNormal = aplicarPercentual(valorOriginal, percentualJuros);
-  const valorBase = valorOriginal + jurosNormal;
+  const venc = new Date(input.dataVencimento);
+  venc.setHours(0, 0, 0, 0);
+  const ref = new Date(input.dataReferencia);
+  ref.setHours(0, 0, 0, 0);
 
-  const dias = diffDays(dataVencimento, dataReferencia);
-  const diasAtraso = dias > 0 ? dias : 0;
+  const diffMs = ref.getTime() - venc.getTime();
+  const diasAtraso = Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
 
-  let jurosAtraso = 0;
-  if (diasAtraso > 0) {
-    // Juros atraso aplicado sobre valorBase (valor + juros normal)
-    const jurosPorDia = aplicarPercentual(valorBase, percentualJurosAtraso);
-    jurosAtraso = jurosPorDia * diasAtraso;
-  }
+  // Juros de atraso: incide sobre (valorOriginal + jurosBase)
+  const baseAtraso = valorOriginal + jurosBase;
+  const jurosAtraso = Math.round((baseAtraso * percentualJurosAtraso * diasAtraso) / 100);
 
   return {
-    valorBase,
-    jurosNormal,
-    jurosAtraso,
+    valorTotal: valorOriginal + jurosBase + jurosAtraso,
+    valorJuros: jurosBase,
+    valorJurosAtraso: jurosAtraso,
     diasAtraso,
-    valorTotal: valorBase + jurosAtraso,
   };
 }
 
-interface CalculoParcela {
+interface CalcParcelaInput {
   valorDevido: number;
   percentualJurosAtraso: number;
   dataVencimento: Date;
   dataReferencia: Date;
 }
 
-/**
- * Calcula valor a pagar de uma parcela em uma data.
- * O valor da parcela JÁ inclui juros normais (admin definiu).
- * Aplica juros atraso se atrasada.
- */
-export function calcularParcela(params: CalculoParcela): ResultadoCalculo {
-  const { valorDevido, percentualJurosAtraso, dataVencimento, dataReferencia } = params;
+export function calcularParcela(input: CalcParcelaInput): {
+  valorTotal: number;
+  valorJurosAtraso: number;
+  diasAtraso: number;
+} {
+  const { valorDevido, percentualJurosAtraso } = input;
 
-  const dias = diffDays(dataVencimento, dataReferencia);
-  const diasAtraso = dias > 0 ? dias : 0;
+  const venc = new Date(input.dataVencimento);
+  venc.setHours(0, 0, 0, 0);
+  const ref = new Date(input.dataReferencia);
+  ref.setHours(0, 0, 0, 0);
 
-  let jurosAtraso = 0;
-  if (diasAtraso > 0) {
-    const jurosPorDia = aplicarPercentual(valorDevido, percentualJurosAtraso);
-    jurosAtraso = jurosPorDia * diasAtraso;
-  }
+  const diffMs = ref.getTime() - venc.getTime();
+  const diasAtraso = Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
+
+  const jurosAtraso = Math.round((valorDevido * percentualJurosAtraso * diasAtraso) / 100);
 
   return {
-    valorBase: valorDevido,
-    jurosNormal: 0,
-    jurosAtraso,
-    diasAtraso,
     valorTotal: valorDevido + jurosAtraso,
+    valorJurosAtraso: jurosAtraso,
+    diasAtraso,
+  };
+}
+
+/**
+ * Calcula só os juros (sem capital) - usado pra "Pagar só juros e renovar"
+ */
+export function calcularSoJuros(input: CalcAVistaInput): {
+  valorJuros: number;
+  valorJurosAtraso: number;
+  totalJuros: number;
+  diasAtraso: number;
+} {
+  const calc = calcularEmprestimoAVista(input);
+  return {
+    valorJuros: calc.valorJuros,
+    valorJurosAtraso: calc.valorJurosAtraso,
+    totalJuros: calc.valorJuros + calc.valorJurosAtraso,
+    diasAtraso: calc.diasAtraso,
   };
 }

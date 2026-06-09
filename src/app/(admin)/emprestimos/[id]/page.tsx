@@ -2,11 +2,24 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Loader2, CheckCircle2, Circle, DollarSign, Copy, Check } from 'lucide-react';
+import Link from 'next/link';
+import {
+  Loader2,
+  CheckCircle2,
+  Circle,
+  DollarSign,
+  Copy,
+  Check,
+  Pencil,
+  History,
+  RefreshCw,
+  Percent,
+} from 'lucide-react';
 import { apiFetch, ApiError } from '@/lib/api-client';
 import { useToast } from '@/components/ui/toast';
 import { Header } from '@/components/layouts/header';
 import { Input, Label } from '@/components/ui/input';
+import { MoneyInput } from '@/components/ui/money-input';
 import { Modal } from '@/components/ui/modal';
 import { formatarBRL } from '@/shared';
 import { formatDate, toInputDate } from '@/lib/date';
@@ -20,6 +33,17 @@ interface Parcela {
   valorPago: number;
   dataPagamento: string | null;
   diasAtraso: number;
+}
+
+interface Pagamento {
+  id: string;
+  valorPago: number;
+  valorJuros: number;
+  valorCapital: number;
+  dataPagamento: string;
+  tipo: 'INTEGRAL' | 'SO_JUROS_RENOVOU' | 'PARCIAL';
+  observacao: string | null;
+  novaDataVencimento: string | null;
 }
 
 interface Emprestimo {
@@ -37,7 +61,14 @@ interface Emprestimo {
   diasAtraso: number;
   status: 'ATIVO' | 'QUITADO' | 'ATRASADO' | 'CANCELADO';
   parcelas: Parcela[];
+  pagamentos: Pagamento[];
 }
+
+const TIPO_PAG_LABEL = {
+  INTEGRAL: 'Quitação',
+  SO_JUROS_RENOVOU: 'Só juros (renovou)',
+  PARCIAL: 'Parcial',
+};
 
 interface PageProps {
   params: { id: string };
@@ -52,13 +83,20 @@ export default function EmprestimoDetalhePage({ params }: PageProps) {
   const [loading, setLoading] = useState(true);
   const [copiado, setCopiado] = useState(false);
 
-  const [modalBaixa, setModalBaixa] = useState<{
-    tipo: 'AVISTA' | 'PARCELA';
-    parcelaId?: string;
-  } | null>(null);
+  // Modal baixa
+  const [modalBaixa, setModalBaixa] = useState(false);
+  const [tipoBaixa, setTipoBaixa] = useState<'INTEGRAL' | 'SO_JUROS_RENOVOU' | 'PARCIAL'>(
+    'INTEGRAL',
+  );
   const [dataPag, setDataPag] = useState(toInputDate(new Date()));
+  const [valorParcialStr, setValorParcialStr] = useState('');
+  const [valorParcialRaw, setValorParcialRaw] = useState(0);
+  const [diasRenovacao, setDiasRenovacao] = useState('30');
   const [obs, setObs] = useState('');
   const [baixando, setBaixando] = useState(false);
+
+  // Modal parcela
+  const [modalParcela, setModalParcela] = useState<{ parcelaId: string } | null>(null);
 
   const carregar = async () => {
     try {
@@ -77,23 +115,62 @@ export default function EmprestimoDetalhePage({ params }: PageProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
+  const abrirBaixa = () => {
+    setTipoBaixa('INTEGRAL');
+    setDataPag(toInputDate(new Date()));
+    setValorParcialStr('');
+    setValorParcialRaw(0);
+    setDiasRenovacao('30');
+    setObs('');
+    setModalBaixa(true);
+  };
+
   const handleBaixar = async () => {
-    if (!modalBaixa) return;
+    if (!emp) return;
+    if (tipoBaixa === 'PARCIAL' && valorParcialRaw <= 0) {
+      toast.error('Informe o valor pago');
+      return;
+    }
     setBaixando(true);
     try {
-      if (modalBaixa.tipo === 'AVISTA') {
-        await apiFetch(`/api/admin/emprestimos/${id}/baixar`, {
-          method: 'POST',
-          body: { dataPagamento: dataPag, observacao: obs || undefined },
-        });
-      } else {
-        await apiFetch(`/api/admin/parcelas-emprestimo/${modalBaixa.parcelaId}/baixar`, {
-          method: 'POST',
-          body: { dataPagamento: dataPag, observacao: obs || undefined },
-        });
-      }
-      toast.success('Pagamento registrado!');
-      setModalBaixa(null);
+      const body: any = {
+        dataPagamento: dataPag,
+        tipo: tipoBaixa,
+        observacao: obs || undefined,
+      };
+      if (tipoBaixa === 'PARCIAL') body.valorPago = valorParcialRaw;
+      if (tipoBaixa === 'SO_JUROS_RENOVOU') body.diasRenovacao = Number(diasRenovacao) || 30;
+
+      await apiFetch(`/api/admin/emprestimos/${id}/baixar`, {
+        method: 'POST',
+        body,
+      });
+      toast.success(
+        tipoBaixa === 'INTEGRAL'
+          ? 'Empréstimo quitado!'
+          : tipoBaixa === 'SO_JUROS_RENOVOU'
+            ? 'Renovado com sucesso!'
+            : 'Pagamento parcial registrado!',
+      );
+      setModalBaixa(false);
+      carregar();
+    } catch (err) {
+      toast.error(err instanceof ApiError ? err.message : 'Erro');
+    } finally {
+      setBaixando(false);
+    }
+  };
+
+  const handleBaixarParcela = async () => {
+    if (!modalParcela) return;
+    setBaixando(true);
+    try {
+      await apiFetch(`/api/admin/parcelas-emprestimo/${modalParcela.parcelaId}/baixar`, {
+        method: 'POST',
+        body: { dataPagamento: dataPag, observacao: obs || undefined },
+      });
+      toast.success('Parcela baixada!');
+      setModalParcela(null);
       setObs('');
       carregar();
     } catch (err) {
@@ -127,17 +204,48 @@ export default function EmprestimoDetalhePage({ params }: PageProps) {
   }
   if (!emp) return null;
 
-  const quitado = emp.status === 'QUITADO';
+  const ativo = emp.status === 'ATIVO' || emp.status === 'ATRASADO';
+  const podeEditar = ativo;
 
   return (
     <>
-      <Header title="Empréstimo" showBack />
+      <Header
+        title="Empréstimo"
+        showBack
+        rightSlot={
+          podeEditar ? (
+            <Link
+              href={`/emprestimos/${id}/editar`}
+              className="rounded-md p-2 hover:bg-accent"
+              aria-label="Editar"
+            >
+              <Pencil className="h-4 w-4" />
+            </Link>
+          ) : null
+        }
+      />
 
       <div className="space-y-4 px-4 py-4">
+        {/* Cabeçalho */}
         <div className="rounded-lg border border-border bg-card p-4 space-y-3">
-          <div>
-            <p className="text-xs text-muted-foreground">Devedor</p>
-            <p className="font-semibold">{emp.nomeDevedor}</p>
+          <div className="flex items-start justify-between gap-2">
+            <div>
+              <p className="text-xs text-muted-foreground">Devedor</p>
+              <p className="font-semibold">{emp.nomeDevedor}</p>
+            </div>
+            <span
+              className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${
+                emp.status === 'ATIVO'
+                  ? 'bg-emerald-100 text-emerald-900'
+                  : emp.status === 'QUITADO'
+                    ? 'bg-blue-100 text-blue-900'
+                    : emp.status === 'ATRASADO'
+                      ? 'bg-destructive/10 text-destructive'
+                      : 'bg-muted text-muted-foreground'
+              }`}
+            >
+              {emp.status}
+            </span>
           </div>
 
           {emp.pixDevedor && (
@@ -162,7 +270,7 @@ export default function EmprestimoDetalhePage({ params }: PageProps) {
 
           <div className="grid grid-cols-2 gap-3 text-sm">
             <div>
-              <p className="text-xs text-muted-foreground">Valor</p>
+              <p className="text-xs text-muted-foreground">Valor original</p>
               <p className="font-semibold">{formatarBRL(emp.valorOriginal)}</p>
             </div>
             <div>
@@ -179,6 +287,13 @@ export default function EmprestimoDetalhePage({ params }: PageProps) {
             </div>
           </div>
 
+          {emp.valorPago > 0 && (
+            <div className="rounded-md bg-emerald-50 px-3 py-2 text-sm">
+              <p className="text-xs text-emerald-800">Total pago até agora</p>
+              <p className="font-bold text-emerald-900">{formatarBRL(emp.valorPago)}</p>
+            </div>
+          )}
+
           {emp.observacao && (
             <div>
               <p className="text-xs text-muted-foreground">Observação</p>
@@ -192,37 +307,13 @@ export default function EmprestimoDetalhePage({ params }: PageProps) {
           <div className="rounded-lg border border-border bg-card p-4 space-y-3">
             <div className="flex items-start justify-between">
               <div>
-                <p className="text-xs text-muted-foreground">Vencimento</p>
+                <p className="text-xs text-muted-foreground">Vencimento atual</p>
                 <p className="font-semibold">{formatDate(emp.dataVencimento)}</p>
               </div>
-              <span
-                className={`rounded-full px-2 py-0.5 text-xs font-medium ${
-                  quitado ? 'bg-blue-100 text-blue-900' : 'bg-emerald-100 text-emerald-900'
-                }`}
-              >
-                {quitado ? 'Pago' : 'A pagar'}
-              </span>
             </div>
-            {quitado && emp.dataPagamento && (
-              <div className="text-sm">
-                <p className="text-xs text-muted-foreground">Pago em</p>
-                <p className="font-semibold">{formatDate(emp.dataPagamento)}</p>
-                <p className="text-xs text-muted-foreground mt-1">Valor pago</p>
-                <p className="font-semibold">{formatarBRL(emp.valorPago)}</p>
-                {emp.diasAtraso > 0 && (
-                  <p className="text-xs text-destructive mt-1">
-                    {emp.diasAtraso} dia{emp.diasAtraso > 1 ? 's' : ''} de atraso
-                  </p>
-                )}
-              </div>
-            )}
-            {!quitado && (
+            {ativo && (
               <button
-                onClick={() => {
-                  setModalBaixa({ tipo: 'AVISTA' });
-                  setDataPag(toInputDate(new Date()));
-                  setObs('');
-                }}
+                onClick={abrirBaixa}
                 className="flex h-11 w-full items-center justify-center gap-2 rounded-md bg-emerald-600 text-sm font-medium text-white hover:bg-emerald-700"
               >
                 <DollarSign className="h-4 w-4" /> Registrar pagamento
@@ -259,7 +350,7 @@ export default function EmprestimoDetalhePage({ params }: PageProps) {
                   {p.status !== 'PAGO' && (
                     <button
                       onClick={() => {
-                        setModalBaixa({ tipo: 'PARCELA', parcelaId: p.id });
+                        setModalParcela({ parcelaId: p.id });
                         setDataPag(toInputDate(new Date()));
                         setObs('');
                       }}
@@ -273,12 +364,164 @@ export default function EmprestimoDetalhePage({ params }: PageProps) {
             ))}
           </div>
         )}
+
+        {/* Histórico de pagamentos */}
+        {emp.pagamentos && emp.pagamentos.length > 0 && (
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <History className="h-4 w-4 text-muted-foreground" />
+              <p className="text-sm font-semibold">Histórico de pagamentos</p>
+            </div>
+            {emp.pagamentos.map((p) => (
+              <div key={p.id} className="rounded-lg border border-border bg-card p-3 text-sm">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <p className="font-semibold">{TIPO_PAG_LABEL[p.tipo]}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {formatDate(p.dataPagamento)}
+                    </p>
+                  </div>
+                  <p className="font-bold text-emerald-700">{formatarBRL(p.valorPago)}</p>
+                </div>
+                {p.tipo === 'SO_JUROS_RENOVOU' && p.novaDataVencimento && (
+                  <p className="mt-1 text-xs text-blue-700">
+                    Renovado até {formatDate(p.novaDataVencimento)}
+                  </p>
+                )}
+                {p.observacao && (
+                  <p className="mt-1 text-xs text-muted-foreground">{p.observacao}</p>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
+      {/* Modal baixa com 3 opções */}
+      <Modal open={modalBaixa} onClose={() => setModalBaixa(false)} title="Registrar pagamento">
+        <div className="space-y-4">
+          {/* Seletor de tipo */}
+          <div className="space-y-2">
+            <Label>Tipo de pagamento</Label>
+            <div className="space-y-2">
+              <button
+                type="button"
+                onClick={() => setTipoBaixa('INTEGRAL')}
+                className={`flex w-full items-start gap-3 rounded-md border-2 p-3 text-left ${
+                  tipoBaixa === 'INTEGRAL'
+                    ? 'border-emerald-500 bg-emerald-50'
+                    : 'border-input'
+                }`}
+              >
+                <CheckCircle2
+                  className={`mt-0.5 h-5 w-5 shrink-0 ${
+                    tipoBaixa === 'INTEGRAL' ? 'text-emerald-600' : 'text-muted-foreground'
+                  }`}
+                />
+                <div>
+                  <p className="font-medium text-sm">Quitar empréstimo</p>
+                  <p className="text-xs text-muted-foreground">
+                    Pagamento total (capital + juros). Empréstimo é encerrado.
+                  </p>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setTipoBaixa('SO_JUROS_RENOVOU')}
+                className={`flex w-full items-start gap-3 rounded-md border-2 p-3 text-left ${
+                  tipoBaixa === 'SO_JUROS_RENOVOU'
+                    ? 'border-amber-500 bg-amber-50'
+                    : 'border-input'
+                }`}
+              >
+                <RefreshCw
+                  className={`mt-0.5 h-5 w-5 shrink-0 ${
+                    tipoBaixa === 'SO_JUROS_RENOVOU' ? 'text-amber-600' : 'text-muted-foreground'
+                  }`}
+                />
+                <div>
+                  <p className="font-medium text-sm">Pagar só juros e renovar</p>
+                  <p className="text-xs text-muted-foreground">
+                    Recebe só os juros, capital continua emprestado, novo vencimento.
+                  </p>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setTipoBaixa('PARCIAL')}
+                className={`flex w-full items-start gap-3 rounded-md border-2 p-3 text-left ${
+                  tipoBaixa === 'PARCIAL' ? 'border-blue-500 bg-blue-50' : 'border-input'
+                }`}
+              >
+                <Percent
+                  className={`mt-0.5 h-5 w-5 shrink-0 ${
+                    tipoBaixa === 'PARCIAL' ? 'text-blue-600' : 'text-muted-foreground'
+                  }`}
+                />
+                <div>
+                  <p className="font-medium text-sm">Pagamento parcial</p>
+                  <p className="text-xs text-muted-foreground">
+                    Pessoa pagou só uma parte. Restante continua devendo.
+                  </p>
+                </div>
+              </button>
+            </div>
+          </div>
+
+          {/* Campos condicionais */}
+          {tipoBaixa === 'PARCIAL' && (
+            <div className="space-y-2">
+              <Label>Valor pago</Label>
+              <MoneyInput
+                value={valorParcialStr}
+                onChange={(str, raw) => {
+                  setValorParcialStr(str);
+                  setValorParcialRaw(raw);
+                }}
+              />
+            </div>
+          )}
+
+          {tipoBaixa === 'SO_JUROS_RENOVOU' && (
+            <div className="space-y-2">
+              <Label>Renovar por quantos dias?</Label>
+              <Input
+                type="number"
+                min={1}
+                max={365}
+                value={diasRenovacao}
+                onChange={(e) => setDiasRenovacao(e.target.value)}
+              />
+            </div>
+          )}
+
+          <div className="space-y-2">
+            <Label>Data do pagamento</Label>
+            <Input type="date" value={dataPag} onChange={(e) => setDataPag(e.target.value)} />
+          </div>
+
+          <div className="space-y-2">
+            <Label>Observação (opcional)</Label>
+            <Input value={obs} onChange={(e) => setObs(e.target.value)} />
+          </div>
+
+          <button
+            onClick={handleBaixar}
+            disabled={baixando}
+            className="flex h-12 w-full items-center justify-center rounded-md bg-primary text-base font-medium text-primary-foreground disabled:opacity-50"
+          >
+            {baixando ? <Loader2 className="h-5 w-5 animate-spin" /> : 'Confirmar pagamento'}
+          </button>
+        </div>
+      </Modal>
+
+      {/* Modal baixar parcela */}
       <Modal
-        open={!!modalBaixa}
-        onClose={() => setModalBaixa(null)}
-        title="Registrar pagamento"
+        open={!!modalParcela}
+        onClose={() => setModalParcela(null)}
+        title="Baixar parcela"
       >
         <div className="space-y-4">
           <div className="space-y-2">
@@ -290,7 +533,7 @@ export default function EmprestimoDetalhePage({ params }: PageProps) {
             <Input value={obs} onChange={(e) => setObs(e.target.value)} />
           </div>
           <button
-            onClick={handleBaixar}
+            onClick={handleBaixarParcela}
             disabled={baixando}
             className="flex h-12 w-full items-center justify-center rounded-md bg-primary text-base font-medium text-primary-foreground disabled:opacity-50"
           >

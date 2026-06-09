@@ -53,6 +53,12 @@ enum StatusParcelaEmprestimo {
   ATRASADO
 }
 
+enum TipoPagamentoEmprestimo {
+  INTEGRAL
+  SO_JUROS_RENOVOU
+  PARCIAL
+}
+
 model Usuario {
   id             String  @id @default(cuid())
   nomeCompleto   String
@@ -165,17 +171,13 @@ model PagamentoCota {
   @@map("pagamentos_cota")
 }
 
-// EMPRESTIMOS - agora com dados do devedor diretos no registro
-
 model Emprestimo {
   id                    String           @id @default(cuid())
 
-  // Devedor (controle interno - admin digita)
   nomeDevedor           String
   pixDevedor            String?
   observacao            String?
 
-  // Legacy: vinculo a Usuario opcional (pra dados antigos nao quebrarem)
   usuarioId             String?
   usuario               Usuario?         @relation(fields: [usuarioId], references: [id])
 
@@ -194,7 +196,8 @@ model Emprestimo {
   criadoEm     DateTime @default(now())
   atualizadoEm DateTime @updatedAt
 
-  parcelas ParcelaEmprestimo[]
+  parcelas    ParcelaEmprestimo[]
+  pagamentos  PagamentoEmprestimo[]
 
   @@index([usuarioId])
   @@index([status])
@@ -220,6 +223,27 @@ model ParcelaEmprestimo {
   @@unique([emprestimoId, numero])
   @@index([status])
   @@map("parcelas_emprestimo")
+}
+
+model PagamentoEmprestimo {
+  id                  String                 @id @default(cuid())
+  emprestimoId        String
+  emprestimo          Emprestimo             @relation(fields: [emprestimoId], references: [id], onDelete: Cascade)
+
+  valorPago           Int
+  valorJuros          Int                    @default(0)
+  valorCapital        Int                    @default(0)
+  dataPagamento       DateTime
+  tipo                TipoPagamentoEmprestimo
+  observacao          String?
+  novaDataVencimento  DateTime?
+
+  registradoPorId     String?
+  criadoEm            DateTime               @default(now())
+
+  @@index([emprestimoId])
+  @@index([dataPagamento])
+  @@map("pagamentos_emprestimo")
 }
 
 model Auditoria {

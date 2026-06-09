@@ -11,26 +11,34 @@ export const GET = withErrorHandling(async (req: NextRequest) => {
 
   const emprestimos = await prisma.emprestimo.findMany({
     where: { status: { in: ['ATIVO', 'ATRASADO'] } },
-    include: { parcelas: true },
+    include: { parcelas: true, pagamentos: true },
   });
 
   let totalAtivos = emprestimos.length;
-  let valorEmprestado = 0;
-  let valorAReceber = 0;
   let totalAtrasados = 0;
 
+  let valorCapitalPendente = 0; // capital ainda a receber
+  let valorJurosAReceber = 0; // só os juros
+  let valorTotalAReceber = 0; // capital + juros
+
   for (const e of emprestimos) {
-    valorEmprestado += e.valorOriginal;
+    const jaPago = e.pagamentos.reduce((acc, p) => acc + p.valorPago, 0);
+    const capitalPago = e.pagamentos.reduce((acc, p) => acc + p.valorCapital, 0);
+    const capitalRestante = Math.max(0, e.valorOriginal - capitalPago);
 
     if (e.tipo === 'A_VISTA' && e.dataVencimento) {
       const calc = calcularEmprestimoAVista({
-        valorOriginal: e.valorOriginal,
+        valorOriginal: capitalRestante,
         percentualJuros: Number(e.percentualJuros),
         percentualJurosAtraso: Number(e.percentualJurosAtraso),
         dataVencimento: e.dataVencimento,
         dataReferencia: hoje,
       });
-      valorAReceber += calc.valorTotal;
+
+      valorCapitalPendente += capitalRestante;
+      valorJurosAReceber += calc.valorJuros + calc.valorJurosAtraso;
+      valorTotalAReceber += calc.valorTotal;
+
       if (calc.diasAtraso > 0) totalAtrasados++;
     } else if (e.tipo === 'PARCELADO') {
       let temAtraso = false;
@@ -42,7 +50,9 @@ export const GET = withErrorHandling(async (req: NextRequest) => {
             dataVencimento: parc.dataVencimento,
             dataReferencia: hoje,
           });
-          valorAReceber += calc.valorTotal;
+          valorTotalAReceber += calc.valorTotal;
+          valorJurosAReceber += calc.valorJurosAtraso;
+          valorCapitalPendente += parc.valorDevido;
           if (calc.diasAtraso > 0) temAtraso = true;
         }
       }
@@ -54,8 +64,9 @@ export const GET = withErrorHandling(async (req: NextRequest) => {
     emprestimos: {
       ativos: totalAtivos,
       atrasados: totalAtrasados,
-      valorEmprestado,
-      valorAReceber,
+      valorEmprestado: valorCapitalPendente,
+      jurosAReceber: valorJurosAReceber,
+      valorAReceber: valorTotalAReceber,
     },
   });
 });
