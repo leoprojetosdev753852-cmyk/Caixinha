@@ -14,7 +14,7 @@ export default function UserLayout({ children }: { children: React.ReactNode }) 
     <SessionGuard requiredRole="USER">
       <div className="min-h-screen bg-background">
         <main className="mx-auto max-w-md pb-20">{children}</main>
-        <BottomNav items={navItems} />
+        <BottomNav role="USER" />
         <Toaster />
       </div>
     </SessionGuard>
