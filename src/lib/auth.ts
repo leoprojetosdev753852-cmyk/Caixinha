@@ -79,14 +79,14 @@ export function getRefreshCookieOptions() {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax' as const,
-    path: '/api/auth',
+    path: '/',
     maxAge: REFRESH_EXPIRES_DAYS * 24 * 60 * 60,
   };
 }
 
 /**
- * Lê token Bearer do header Authorization e retorna user atual.
- * Retorna null se não tiver token ou for inválido.
+ * LÃª token Bearer do header Authorization e retorna user atual.
+ * Retorna null se nÃ£o tiver token ou for invÃ¡lido.
  */
 export async function getCurrentUser(authHeader: string | null): Promise<JwtPayload | null> {
   if (!authHeader || !authHeader.startsWith('Bearer ')) return null;
@@ -96,12 +96,12 @@ export async function getCurrentUser(authHeader: string | null): Promise<JwtPayl
 
 /**
  * Helper para rotas que exigem auth.
- * Lança erro 401 se não autenticado.
+ * LanÃ§a erro 401 se nÃ£o autenticado.
  */
 export async function requireAuth(authHeader: string | null): Promise<JwtPayload> {
   const user = await getCurrentUser(authHeader);
   if (!user) {
-    throw new Response(JSON.stringify({ error: 'UNAUTHORIZED', message: 'Não autorizado' }), {
+    throw new Response(JSON.stringify({ error: 'UNAUTHORIZED', message: 'NÃ£o autorizado' }), {
       status: 401,
     });
   }
