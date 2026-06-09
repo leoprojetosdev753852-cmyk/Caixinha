@@ -19,18 +19,15 @@ export const POST = withErrorHandling(async (req: NextRequest, { params }: Ctx) 
   const parcela = await prisma.parcelaEmprestimo.findUnique({
     where: { id: params.id },
     include: {
-      emprestimo: {
-        include: {
-          usuario: { select: { nomeCompleto: true } },
-          parcelas: true,
-        },
-      },
+      emprestimo: true,
     },
   });
 
-  if (!parcela) return errorResponse('Parcela não encontrada', 404, 'NOT_FOUND');
+  if (!parcela) {
+    return errorResponse('Parcela nao encontrada', 404, 'NOT_FOUND');
+  }
   if (parcela.status === 'PAGO') {
-    return errorResponse('Parcela já paga', 400);
+    return errorResponse('Parcela ja foi paga', 400, 'JA_PAGA');
   }
 
   const calc = calcularParcela({
@@ -40,40 +37,47 @@ export const POST = withErrorHandling(async (req: NextRequest, { params }: Ctx) 
     dataReferencia: new Date(dataPagamento),
   });
 
-  await prisma.$transaction(async (tx) => {
-    await tx.parcelaEmprestimo.update({
-      where: { id: params.id },
+  // Atualiza parcela
+  await prisma.parcelaEmprestimo.update({
+    where: { id: params.id },
+    data: {
+      status: 'PAGO',
+      valorPago: calc.valorTotal,
+      dataPagamento: new Date(dataPagamento),
+      diasAtraso: calc.diasAtraso,
+      baixadoPorId: admin.sub,
+    },
+  });
+
+  // Verifica se todas as parcelas foram pagas para marcar emprestimo como QUITADO
+  const parcelasRestantes = await prisma.parcelaEmprestimo.count({
+    where: {
+      emprestimoId: parcela.emprestimoId,
+      status: { not: 'PAGO' },
+    },
+  });
+
+  if (parcelasRestantes === 0) {
+    await prisma.emprestimo.update({
+      where: { id: parcela.emprestimoId },
       data: {
-        status: 'PAGO',
-        valorPago: calc.valorTotal,
+        status: 'QUITADO',
         dataPagamento: new Date(dataPagamento),
-        diasAtraso: calc.diasAtraso,
-        baixadoPorId: admin.sub,
       },
     });
-
-    // Se TODAS as parcelas estão pagas, marca empréstimo como QUITADO
-    const todasPagas = parcela.emprestimo.parcelas.every(
-      (p) => p.id === parcela.id || p.status === 'PAGO',
-    );
-    if (todasPagas) {
-      await tx.emprestimo.update({
-        where: { id: parcela.emprestimoId },
-        data: { status: 'QUITADO' },
-      });
-    }
-  });
+  }
 
   await registrarAuditoria({
     categoria: AUDIT.PAGAMENTO_BAIXA,
-    acao: `Baixou parcela ${parcela.numero} do empréstimo de ${parcela.emprestimo.usuario.nomeCompleto}`,
+    acao: `Baixou parcela ${parcela.numero} do emprestimo de ${parcela.emprestimo.nomeDevedor}`,
     usuarioId: admin.sub,
     metadata: {
       parcelaId: parcela.id,
       emprestimoId: parcela.emprestimoId,
       valorTotal: calc.valorTotal,
+      diasAtraso: calc.diasAtraso,
     },
   });
 
-  return NextResponse.json({ ok: true, calculo: calc });
+  return NextResponse.json({ ok: true, calculo: calc, emprestimoQuitado: parcelasRestantes === 0 });
 });
